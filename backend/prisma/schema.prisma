@@ -1,0 +1,58 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  HELPDESK
+  ENGINEER
+}
+
+enum Status {
+  OPEN
+  ASSIGNED
+  HOLD
+  RESOLVED
+}
+
+model User {
+  id              Int       @id @default(autoincrement())
+  email           String    @unique
+  password        String
+  name            String
+  role            Role      @default(USER)
+  createdTickets  Ticket[]  @relation("CreatedTickets")
+  assignedTickets Ticket[]  @relation("AssignedTickets")
+  createdAt       DateTime  @default(now())
+}
+
+model Ticket {
+  id           Int       @id @default(autoincrement())
+  ticketNumber String   @unique 
+  title        String
+  description  String
+  hostname     String?
+  category     String?
+  subCategory  String?
+  attachmentUrl String?
+  priority     String?  @default("Standard")
+  notes        String?
+
+
+  status       Status    @default(OPEN)
+  
+  createdById  Int
+  createdBy    User      @relation("CreatedTickets", fields: [createdById], references: [id])
+  
+  assignedToId Int?
+  assignedTo   User?     @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
