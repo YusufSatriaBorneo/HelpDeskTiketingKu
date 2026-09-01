@@ -8,8 +8,8 @@ const router = express.Router();
 
 router.use(authenticateToken);
 
-// Mengambil daftar semua akun (Hanya untuk HELPDESK)
-router.get("/", authorizeRole(["HELPDESK"]), async (req, res) => {
+// Mengambil daftar semua akun (Untuk HELPDESK dan ENGINEER)
+router.get("/", authorizeRole(["HELPDESK", "ENGINEER"]), async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       select: {

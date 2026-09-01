@@ -22,37 +22,57 @@ enum Status {
 }
 
 model User {
-  id              Int       @id @default(autoincrement())
-  email           String    @unique
+  id              Int             @id @default(autoincrement())
+  email           String          @unique
   password        String
   name            String
-  role            Role      @default(USER)
-  createdTickets  Ticket[]  @relation("CreatedTickets")
-  assignedTickets Ticket[]  @relation("AssignedTickets")
-  createdAt       DateTime  @default(now())
+  role            Role            @default(USER)
+  createdTickets  Ticket[]        @relation("CreatedTickets")
+  assignedTickets Ticket[]        @relation("AssignedTickets")
+  ticketHistories TicketHistory[] @relation("UserTicketHistories") // <-- TAMBAHAN BARU
+  createdAt       DateTime        @default(now())
 }
 
 model Ticket {
-  id           Int       @id @default(autoincrement())
-  ticketNumber String   @unique 
-  title        String
-  description  String
-  hostname     String?
-  category     String?
-  subCategory  String?
+  id            Int             @id @default(autoincrement())
+  ticketNumber  String          @unique 
+  title         String
+  description   String
+  hostname      String?
+  category      String?
+  subCategory   String?
   attachmentUrl String?
-  priority     String?  @default("Standard")
-  notes        String?
+  priority      String?         @default("Standard")
+  notes         String?
 
+  status        Status          @default(OPEN)
+  
+  createdById   Int
+  createdBy     User            @relation("CreatedTickets", fields: [createdById], references: [id])
+  
+  assignedToId  Int?
+  assignedTo    User?           @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  
+  histories     TicketHistory[] // <-- TAMBAHAN BARU
 
-  status       Status    @default(OPEN)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+// ==========================================
+// TAMBAHAN MODEL BARU UNTUK HISTORY
+// ==========================================
+model TicketHistory {
+  id          Int      @id @default(autoincrement())
   
-  createdById  Int
-  createdBy    User      @relation("CreatedTickets", fields: [createdById], references: [id])
+  ticketId    Int
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   
-  assignedToId Int?
-  assignedTo   User?     @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  status      Status   // Menyimpan status saat update dilakukan
+  note        String?  // Menyimpan catatan saat tiket dilempar/diupdate
   
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  updatedById Int
+  updatedBy   User     @relation("UserTicketHistories", fields: [updatedById], references: [id]) // Mencatat siapa engineer/helpdesk-nya
+  
+  createdAt   DateTime @default(now()) // Otomatis mencatat Date dan Time
 }

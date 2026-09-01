@@ -118,7 +118,7 @@ router.post(
   },
 );
 
-// --- 4. ROUTE GET TICKETS (Safe Version) ---
+// --- 4. ROUTE GET TICKETS (Termasuk Relation History) ---
 router.get("/", async (req, res) => {
   try {
     if (!req.user || !req.user.role) {
@@ -131,21 +131,38 @@ router.get("/", async (req, res) => {
     if (userRole === "USER") {
       tickets = await prisma.ticket.findMany({
         where: { createdById: req.user.id },
-        include: { assignedTo: { select: { name: true, email: true } } },
+        include: {
+          assignedTo: { select: { id: true, name: true, email: true } },
+          histories: {
+            include: { updatedBy: { select: { name: true, role: true } } },
+            orderBy: { createdAt: "desc" },
+          },
+        },
         orderBy: { createdAt: "desc" },
       });
     } else if (userRole === "HELPDESK") {
       tickets = await prisma.ticket.findMany({
         include: {
-          createdBy: { select: { name: true, email: true } },
-          assignedTo: { select: { name: true, email: true } },
+          createdBy: { select: { id: true, name: true, email: true } },
+          assignedTo: { select: { id: true, name: true, email: true } },
+          histories: {
+            include: { updatedBy: { select: { name: true, role: true } } },
+            orderBy: { createdAt: "desc" },
+          },
         },
         orderBy: { createdAt: "desc" },
       });
     } else if (userRole === "ENGINEER") {
       tickets = await prisma.ticket.findMany({
         where: { assignedToId: req.user.id },
-        include: { createdBy: { select: { name: true, email: true } } },
+        include: {
+          createdBy: { select: { id: true, name: true, email: true } },
+          assignedTo: { select: { id: true, name: true, email: true } },
+          histories: {
+            include: { updatedBy: { select: { name: true, role: true } } },
+            orderBy: { createdAt: "desc" },
+          },
+        },
         orderBy: { createdAt: "desc" },
       });
     }
@@ -158,22 +175,26 @@ router.get("/", async (req, res) => {
   }
 });
 
-// --- 5. ROUTE GET ENGINEERS ---
-router.get("/engineers", authorizeRole(["HELPDESK"]), async (req, res) => {
-  try {
-    const engineers = await prisma.user.findMany({
-      where: { role: "ENGINEER" },
-      select: { id: true, name: true, email: true },
-    });
-    res.json(engineers);
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching engineers", error: error.message });
-  }
-});
+// --- 5. ROUTE GET ENGINEERS (Bisa Akses Helpdesk & Engineer) ---
+router.get(
+  "/engineers",
+  authorizeRole(["HELPDESK", "ENGINEER"]),
+  async (req, res) => {
+    try {
+      const engineers = await prisma.user.findMany({
+        where: { role: "ENGINEER" },
+        select: { id: true, name: true, email: true },
+      });
+      res.json(engineers);
+    } catch (error) {
+      res
+        .status(500)
+        .json({ message: "Error fetching engineers", error: error.message });
+    }
+  },
+);
 
-// --- 6. ROUTE PUT ASSIGN TICKET ---
+// --- 6. ROUTE PUT ASSIGN TICKET (Helpdesk Assign & Pencatatan History) ---
 router.put("/:id/assign", authorizeRole(["HELPDESK"]), async (req, res) => {
   const ticketId = parseInt(req.params.id);
   const { assignedToId } = req.body;
@@ -188,8 +209,18 @@ router.put("/:id/assign", authorizeRole(["HELPDESK"]), async (req, res) => {
       data: {
         assignedToId: parseInt(assignedToId),
         status: "ASSIGNED",
+        histories: {
+          create: {
+            status: "ASSIGNED",
+            note: "Tiket di-assign ke engineer",
+            updatedById: req.user.id,
+          },
+        },
       },
-      include: { assignedTo: { select: { name: true } } },
+      include: {
+        assignedTo: { select: { id: true, name: true } },
+        histories: { include: { updatedBy: { select: { name: true } } } },
+      },
     });
     res.json(ticket);
   } catch (error) {
@@ -199,7 +230,7 @@ router.put("/:id/assign", authorizeRole(["HELPDESK"]), async (req, res) => {
   }
 });
 
-// --- 7. ROUTE PUT RESOLVE (Engineer Endpoint) ---
+// --- 7. ROUTE PUT RESOLVE (Engineer Resolve & Pencatatan History) ---
 router.put("/:id/resolve", authorizeRole(["ENGINEER"]), async (req, res) => {
   const ticketId = parseInt(req.params.id);
 
@@ -214,8 +245,20 @@ router.put("/:id/resolve", authorizeRole(["ENGINEER"]), async (req, res) => {
 
     const updatedTicket = await prisma.ticket.update({
       where: { id: ticketId },
-      data: { status: "RESOLVED" },
-      include: { createdBy: true },
+      data: {
+        status: "RESOLVED",
+        histories: {
+          create: {
+            status: "RESOLVED",
+            note: "Tiket diselesaikan",
+            updatedById: req.user.id,
+          },
+        },
+      },
+      include: {
+        createdBy: true,
+        histories: { include: { updatedBy: { select: { name: true } } } },
+      },
     });
 
     // Panggil Webhook n8n
@@ -229,32 +272,55 @@ router.put("/:id/resolve", authorizeRole(["ENGINEER"]), async (req, res) => {
   }
 });
 
-// --- 8. ROUTE PUT UPDATE (Priority, Notes, AssignTo, Status) ---
+// --- 8. ROUTE PUT UPDATE (Priority, Notes, Re-Assign, Status, & History) ---
 router.put(
   "/:id/update",
   authorizeRole(["HELPDESK", "ENGINEER"]),
   async (req, res) => {
     const ticketId = parseInt(req.params.id);
-    const { priority, notes, assignedToId, status } = req.body;
+    const { priority, notes, assignedToId, engineerId, status } = req.body;
 
     try {
+      const existingTicket = await prisma.ticket.findUnique({
+        where: { id: ticketId },
+      });
+      if (!existingTicket)
+        return res.status(404).json({ message: "Ticket not found" });
+
+      const finalStatus = status !== undefined ? status : existingTicket.status;
       const updateData = {};
 
       if (priority !== undefined) updateData.priority = priority;
       if (notes !== undefined) updateData.notes = notes;
       if (status !== undefined) updateData.status = status;
 
-      if (assignedToId !== undefined) {
-        updateData.assignedToId = assignedToId ? parseInt(assignedToId) : null;
+      // Perbaikan: Tidak mengubah assignedToId menjadi null jika form kosong/tidak diubah
+      const targetEngineerId =
+        assignedToId !== undefined ? assignedToId : engineerId;
+      if (targetEngineerId !== undefined) {
+        if (targetEngineerId !== "" && targetEngineerId !== null) {
+          updateData.assignedToId = parseInt(targetEngineerId);
+        }
       }
+
+      updateData.histories = {
+        create: {
+          status: finalStatus,
+          note: notes || "Melakukan update tiket",
+          updatedById: req.user.id,
+        },
+      };
 
       const updatedTicket = await prisma.ticket.update({
         where: { id: ticketId },
         data: updateData,
-        include: { createdBy: true },
+        include: {
+          createdBy: true,
+          assignedTo: { select: { id: true, name: true, email: true } },
+          histories: { include: { updatedBy: { select: { name: true } } } },
+        },
       });
 
-      // Panggil Webhook n8n HANYA jika status diubah menjadi RESOLVED
       if (status === "RESOLVED") {
         triggerN8nWebhook(updatedTicket);
       }
@@ -268,5 +334,4 @@ router.put(
     }
   },
 );
-
 module.exports = router;
