@@ -10,6 +10,9 @@ const EngineerDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // State untuk mengontrol toggle log history per tiket
+  const [showLogs, setShowLogs] = useState({});
+
   const fetchTickets = async () => {
     setIsLoading(true);
     setError(null);
@@ -38,14 +41,10 @@ const EngineerDashboard = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        console.log("Data user dari API:", data); // Cek console browser untuk memastikan struktur data
-
-        // Menyesuaikan apakah data langsung berupa array atau terbungkus objek lain
         const usersArray = Array.isArray(data)
           ? data
           : data.users || data.data || [];
 
-        // Filter user yang memiliki role ENGINEER
         const engineerList = usersArray.filter(
           (u) => u.role && u.role.toLowerCase() === "engineer",
         );
@@ -85,7 +84,7 @@ const EngineerDashboard = () => {
 
       if (res.ok) {
         alert("Data tiket berhasil diperbarui!");
-        fetchTickets();
+        fetchTickets(); // Refresh data untuk mendapatkan log history terbaru
       } else {
         const errorData = await res.json();
         alert(`Gagal memperbarui tiket: ${errorData.message}`);
@@ -96,7 +95,16 @@ const EngineerDashboard = () => {
     }
   };
 
+  // Fungsi toggle Log History
+  const toggleLogs = (ticketId) => {
+    setShowLogs((prev) => ({
+      ...prev,
+      [ticketId]: !prev[ticketId],
+    }));
+  };
+
   const formatDateTime = (dateString) => {
+    if (!dateString) return "-";
     const options = {
       year: "numeric",
       month: "short",
@@ -427,8 +435,7 @@ const EngineerDashboard = () => {
                             fontWeight: "bold",
                             textTransform: "uppercase",
                             letterSpacing: "0.025em",
-                            color:
-                              ticket.status === "RESOLVED" ? "white" : "white",
+                            color: "white",
                             backgroundColor:
                               ticket.status === "RESOLVED"
                                 ? "#14b8a6"
@@ -468,7 +475,10 @@ const EngineerDashboard = () => {
                       {ticket.attachmentUrl && (
                         <div style={{ marginBottom: "1rem" }}>
                           <a
-                            href={`http://localhost:5000/${ticket.attachmentUrl.replace(/\\/g, "/")}`}
+                            href={`http://localhost:5000/${ticket.attachmentUrl.replace(
+                              /\\/g,
+                              "/",
+                            )}`}
                             target="_blank"
                             rel="noreferrer"
                             style={{
@@ -535,7 +545,6 @@ const EngineerDashboard = () => {
                               <option value="OPEN">Open</option>
                               <option value="ASSIGNED">Assigned</option>
                               <option value="HOLD">Hold</option>
-                              {/* <option value="PENDING">Pending</option> */}
                               <option value="RESOLVED">Resolved</option>
                             </select>
                           </div>
@@ -551,7 +560,7 @@ const EngineerDashboard = () => {
                             </label>
                             <select
                               name="engineerId"
-                              defaultValue={ticket.assignedToId || ""} // Ubah dari ticket.engineerId ke ticket.assignedToId
+                              defaultValue={ticket.assignedToId || ""}
                               className="form-control"
                               style={{
                                 width: "100%",
@@ -636,6 +645,129 @@ const EngineerDashboard = () => {
                           )}
                         </div>
                       )}
+
+                      {/* --- START FITUR LOG HISTORY --- */}
+                      <button
+                        type="button"
+                        onClick={() => toggleLogs(ticket.id)}
+                        style={{
+                          marginTop: "15px",
+                          backgroundColor: "transparent",
+                          color: "#3b82f6",
+                          border: "1px solid #3b82f6",
+                          padding: "6px 12px",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "0.85rem",
+                          width: "100%",
+                          display: "flex",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          gap: "8px",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        {showLogs[ticket.id]
+                          ? "🔼 Sembunyikan Log History"
+                          : "🔽 Lihat Log History"}
+                      </button>
+
+                      {showLogs[ticket.id] && (
+                        <div
+                          style={{
+                            marginTop: "12px",
+                            padding: "12px",
+                            backgroundColor: "rgba(128, 128, 128, 0.1)",
+                            borderRadius: "6px",
+                            border: "1px solid var(--border-color)",
+                            maxHeight: "200px",
+                            overflowY: "auto",
+                          }}
+                        >
+                          <h5
+                            style={{
+                              margin: "0 0 10px 0",
+                              fontSize: "0.85rem",
+                              color: "var(--text-secondary)",
+                            }}
+                          >
+                            Riwayat Pembaruan:
+                          </h5>
+
+                          {/* Diubah dari ticket.logs menjadi ticket.histories */}
+                          {ticket.histories && ticket.histories.length > 0 ? (
+                            <ul
+                              style={{
+                                listStyle: "none",
+                                padding: 0,
+                                margin: 0,
+                                fontSize: "0.8rem",
+                                color: "var(--text-primary)",
+                              }}
+                            >
+                              {ticket.histories.map((log, index) => (
+                                <li
+                                  key={log.id || index}
+                                  style={{
+                                    borderBottom: "1px solid #444",
+                                    paddingBottom: "8px",
+                                    marginBottom: "8px",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      marginBottom: "4px",
+                                    }}
+                                  >
+                                    <strong style={{ color: "#4da6ff" }}>
+                                      {log.updatedBy?.name ||
+                                        "Sistem / Engineer"}
+                                    </strong>
+                                    <span
+                                      style={{
+                                        color: "var(--text-secondary)",
+                                        fontSize: "0.75rem",
+                                      }}
+                                    >
+                                      {formatDateTime(log.createdAt)}
+                                    </span>
+                                  </div>
+                                  <div style={{ marginBottom: "2px" }}>
+                                    Status diubah menjadi:{" "}
+                                    <strong>{log.status}</strong>
+                                  </div>
+                                  {/* Diubah dari log.notes menjadi log.note */}
+                                  {log.note && (
+                                    <div
+                                      style={{
+                                        fontStyle: "italic",
+                                        color: "var(--text-secondary)",
+                                        marginTop: "4px",
+                                      }}
+                                    >
+                                      " {log.note} "
+                                    </div>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: "0.8rem",
+                                color: "var(--text-secondary)",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              Belum ada riwayat pembaruan untuk tiket ini.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {/* --- END FITUR LOG HISTORY --- */}
                     </div>
                   ))}
                   {filteredTickets.length === 0 && (

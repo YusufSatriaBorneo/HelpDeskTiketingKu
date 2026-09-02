@@ -18,6 +18,7 @@ const HelpDeskDashboard = () => {
   const [tickets, setTickets] = useState([]);
   const [engineers, setEngineers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showLogs, setShowLogs] = useState({});
 
   // STATE: Mengontrol tab aktif di sidebar (Default sekarang adalah 'home')
   const [activeTab, setActiveTab] = useState("home");
@@ -90,6 +91,25 @@ const HelpDeskDashboard = () => {
       console.error(err);
       alert("Terjadi kesalahan jaringan.");
     }
+  };
+
+  const toggleLogs = (ticketId) => {
+    setShowLogs((prev) => ({
+      ...prev,
+      [ticketId]: !prev[ticketId],
+    }));
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return "-";
+    const options = {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    };
+    return new Date(dateString).toLocaleDateString("id-ID", options);
   };
 
   // LOGIKA FILTERING TIKET TERBARU
@@ -909,6 +929,124 @@ const HelpDeskDashboard = () => {
                         )}
                       </div>
                     )}
+                    {/* --- FITUR LOG HISTORY --- */}
+                    <button
+                      type="button"
+                      onClick={() => toggleLogs(ticket.id)}
+                      style={{
+                        marginTop: "15px",
+                        backgroundColor: "transparent",
+                        color: "#3b82f6",
+                        border: "1px solid #3b82f6",
+                        padding: "6px 12px",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "0.85rem",
+                        width: "100%",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      {showLogs[ticket.id]
+                        ? "🔼 Sembunyikan Log History"
+                        : "🔽 Lihat Log History"}
+                    </button>
+
+                    {showLogs[ticket.id] && (
+                      <div
+                        style={{
+                          marginTop: "12px",
+                          padding: "12px",
+                          backgroundColor: "rgba(128, 128, 128, 0.1)",
+                          borderRadius: "6px",
+                          border: "1px solid var(--border-color)",
+                          maxHeight: "200px",
+                          overflowY: "auto",
+                        }}
+                      >
+                        <h5
+                          style={{
+                            margin: "0 0 10px 0",
+                            fontSize: "0.85rem",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          Riwayat Pembaruan:
+                        </h5>
+                        {ticket.histories && ticket.histories.length > 0 ? (
+                          <ul
+                            style={{
+                              listStyle: "none",
+                              padding: 0,
+                              margin: 0,
+                              fontSize: "0.8rem",
+                              color: "var(--text-primary)",
+                            }}
+                          >
+                            {ticket.histories.map((log, index) => (
+                              <li
+                                key={log.id || index}
+                                style={{
+                                  borderBottom: "1px solid #444",
+                                  paddingBottom: "8px",
+                                  marginBottom: "8px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    marginBottom: "4px",
+                                  }}
+                                >
+                                  <strong style={{ color: "#4da6ff" }}>
+                                    {log.updatedBy?.name || "Sistem / Helpdesk"}
+                                  </strong>
+                                  <span
+                                    style={{
+                                      color: "var(--text-secondary)",
+                                      fontSize: "0.75rem",
+                                    }}
+                                  >
+                                    {formatDateTime(log.createdAt)}
+                                  </span>
+                                </div>
+                                <div style={{ marginBottom: "2px" }}>
+                                  Status diubah menjadi:{" "}
+                                  <strong>{log.status}</strong>
+                                </div>
+                                {log.note && (
+                                  <div
+                                    style={{
+                                      fontStyle: "italic",
+                                      color: "var(--text-secondary)",
+                                      marginTop: "4px",
+                                    }}
+                                  >
+                                    " {log.note} "
+                                  </div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: "0.8rem",
+                              color: "var(--text-secondary)",
+                              fontStyle: "italic",
+                            }}
+                          >
+                            Belum ada riwayat pembaruan untuk tiket ini.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {ticket.assignedTo && (
                       <div
                         style={{
