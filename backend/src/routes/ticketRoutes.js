@@ -321,7 +321,8 @@ router.put(
         },
       });
 
-      if (status === "RESOLVED") {
+      // Di dalam route /:id/update
+      if (status === "RESOLVED" || status === "HOLD" || status === "PENDING") {
         triggerN8nWebhook(updatedTicket);
       }
 
