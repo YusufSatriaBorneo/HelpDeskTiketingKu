@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import SLATimer from "../components/SLATimer";
 // IMPORT RECHARTS UNTUK GRAFIK
 import {
   BarChart,
@@ -230,6 +231,35 @@ const HelpDeskDashboard = () => {
     fontSize: "0.75rem",
     fontWeight: "700",
   });
+
+  // Fungsi ini diletakkan SEBELUM return (...)
+  const handleQuickStatus = async (ticketId, newStatus) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `http://localhost:5000/api/tickets/${ticketId}/update`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status: newStatus }),
+        },
+      );
+
+      if (response.ok) {
+        // Panggil fungsi fetch tiket Anda lagi agar data di layar terbarui
+        // fetchTickets();
+      } else {
+        const errorData = await response.json();
+        alert(`Gagal update status: ${errorData.message}`);
+      }
+    } catch (error) {
+      console.error("Error Quick Status:", error);
+      alert("Terjadi kesalahan jaringan.");
+    }
+  };
 
   return (
     <div
@@ -668,14 +698,16 @@ const HelpDeskDashboard = () => {
                           backgroundColor:
                             ticket.status === "RESOLVED"
                               ? "#14b8a6"
-                              : ticket.status === "ASSIGNED"
-                                ? "#8b5cf6"
-                                : ticket.status === "OPEN"
-                                  ? "#3b82f6"
-                                  : ticket.status === "HOLD" ||
-                                      ticket.status === "PENDING"
-                                    ? "#f59e0b"
-                                    : "#6b7280",
+                              : ticket.status === "IN_PROGRESS"
+                                ? "#0d6efd"
+                                : ticket.status === "ASSIGNED"
+                                  ? "#8b5cf6"
+                                  : ticket.status === "OPEN"
+                                    ? "#3b82f6"
+                                    : ticket.status === "HOLD" ||
+                                        ticket.status === "PENDING"
+                                      ? "#f59e0b"
+                                      : "#6b7280",
                         }}
                       >
                         {ticket.status}
@@ -737,6 +769,20 @@ const HelpDeskDashboard = () => {
                       {ticket.createdBy?.email})<br />
                       Created: {new Date(ticket.createdAt).toLocaleDateString()}
                     </div>
+                    {/* ========================================================= */}
+                    {/* 📍 KOMPONEN SLA TIMER DENGAN PENGECEKAN STATUS */}
+                    {/* ========================================================= */}
+                    {ticket.status !== "RESOLVED" && (
+                      <div
+                        style={{
+                          marginTop: "1rem",
+                          paddingTop: "1rem",
+                          borderTop: "1px dashed var(--border-color)",
+                        }}
+                      >
+                        <SLATimer ticket={ticket} />
+                      </div>
+                    )}
 
                     <hr
                       style={{
@@ -746,174 +792,256 @@ const HelpDeskDashboard = () => {
                     />
 
                     {ticket.status !== "RESOLVED" ? (
-                      <form
-                        onSubmit={(e) => handleUpdateTicket(e, ticket.id)}
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "12px",
-                        }}
-                      >
-                        <div>
-                          <label
-                            style={{
-                              fontSize: "0.85rem",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            Priority:
-                          </label>
-                          <select
-                            name="priority"
-                            defaultValue={ticket.priority || "Standard"}
-                            disabled={isReadOnly}
-                            className="form-control"
-                            style={{
-                              width: "100%",
-                              padding: "8px",
-                              backgroundColor: "rgba(51, 51, 51, 1)",
-                              color: "white",
-                              border: "none",
-                              borderRadius: "4px",
-                              opacity: isReadOnly ? 0.6 : 1,
-                              cursor: isReadOnly ? "not-allowed" : "pointer",
-                            }}
-                          >
-                            <option value="Standard">Standard</option>
-                            <option value="Urgent">Urgent</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label
-                            style={{
-                              fontSize: "0.85rem",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            Notes Form IT:
-                          </label>
-                          <textarea
-                            name="notes"
-                            defaultValue={ticket.notes}
-                            disabled={isReadOnly}
-                            className="form-control"
-                            rows="2"
-                            placeholder="Tambahkan catatan tindak lanjut di sini..."
-                            style={{
-                              width: "100%",
-                              padding: "8px",
-                              backgroundColor: "#333",
-                              color: "white",
-                              border: "none",
-                              borderRadius: "4px",
-                              resize: "vertical",
-                              opacity: isReadOnly ? 0.6 : 1,
-                              cursor: isReadOnly ? "not-allowed" : "text",
-                            }}
-                          ></textarea>
-                        </div>
-                        <div>
-                          <label
-                            style={{
-                              fontSize: "0.85rem",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            Assign to:
-                          </label>
-                          <select
-                            name="assignedToId"
-                            defaultValue={
-                              ticket.assignedTo?.id || ticket.assignedToId || ""
-                            }
-                            disabled={isReadOnly}
-                            className="form-control"
-                            style={{
-                              width: "100%",
-                              padding: "8px",
-                              backgroundColor: "rgba(51, 51, 51, 1)",
-                              color: "white",
-                              border: "none",
-                              borderRadius: "4px",
-                              opacity: isReadOnly ? 0.6 : 1,
-                              cursor: isReadOnly ? "not-allowed" : "pointer",
-                            }}
-                          >
-                            <option value="">
-                              Pilih Engineer (Biarkan kosong jika belum)
-                            </option>
-                            {engineers.map((eng) => (
-                              <option key={eng.id} value={eng.id}>
-                                {eng.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label
-                            style={{
-                              fontSize: "0.85rem",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            Status Tiket:
-                          </label>
-                          <select
-                            name="status"
-                            defaultValue={ticket.status}
-                            disabled={isReadOnly}
-                            className="form-control"
-                            style={{
-                              width: "100%",
-                              padding: "8px",
-                              backgroundColor: "rgba(51, 51, 51, 1)",
-                              color: "white",
-                              border: "none",
-                              borderRadius: "4px",
-                              opacity: isReadOnly ? 0.6 : 1,
-                              cursor: isReadOnly ? "not-allowed" : "pointer",
-                            }}
-                          >
-                            <option value="OPEN">Open</option>
-                            <option value="ASSIGNED">Assigned</option>
-                            <option value="HOLD">Hold</option>
-                            <option value="RESOLVED">Resolved</option>
-                          </select>
-                        </div>
-                        {!isReadOnly ? (
-                          <button
-                            type="submit"
-                            className="btn btn-primary"
-                            style={{ marginTop: "10px", width: "100%" }}
-                          >
-                            Simpan Perubahan
-                          </button>
-                        ) : (
+                      <>
+                        {/* --- TOMBOL QUICK ACTION IN PROGRESS / HOLD --- */}
+                        {!isReadOnly && (
                           <div
                             style={{
-                              marginTop: "10px",
-                              textAlign: "center",
-                              fontSize: "0.85rem",
-                              color: "#f59e0b",
-                              fontStyle: "italic",
+                              display: "flex",
+                              gap: "10px",
+                              marginBottom: "15px",
                             }}
                           >
-                            Tiket sedang ditangani oleh engineer.
+                            {(ticket.status === "OPEN" ||
+                              ticket.status === "ASSIGNED" ||
+                              ticket.status === "HOLD") && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleQuickStatus(ticket.id, "IN_PROGRESS")
+                                }
+                                style={{
+                                  flex: 1,
+                                  padding: "8px",
+                                  backgroundColor: "#0d6efd",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontWeight: "bold",
+                                  transition: "0.2s",
+                                }}
+                              >
+                                ▶ Mulai / Resume (In Progress)
+                              </button>
+                            )}
+                            {ticket.status === "IN_PROGRESS" && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleQuickStatus(ticket.id, "HOLD")
+                                }
+                                style={{
+                                  flex: 1,
+                                  padding: "8px",
+                                  backgroundColor: "#f59e0b",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontWeight: "bold",
+                                  transition: "0.2s",
+                                }}
+                              >
+                                ⏸ Pause Pekerjaan (Hold)
+                              </button>
+                            )}
                           </div>
                         )}
-                      </form>
+                        {/* ---------------------------------------------- */}
+
+                        <form
+                          onSubmit={(e) => handleUpdateTicket(e, ticket.id)}
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "12px",
+                          }}
+                        >
+                          <div>
+                            <label
+                              style={{
+                                fontSize: "0.85rem",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              Priority:
+                            </label>
+                            <select
+                              name="priority"
+                              defaultValue={ticket.priority || "Standard"}
+                              disabled={isReadOnly}
+                              className="form-control"
+                              style={{
+                                width: "100%",
+                                padding: "8px",
+                                backgroundColor: "rgba(51, 51, 51, 1)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                opacity: isReadOnly ? 0.6 : 1,
+                                cursor: isReadOnly ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              <option value="Standard">Standard</option>
+                              <option value="Urgent">Urgent</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label
+                              style={{
+                                fontSize: "0.85rem",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              Notes Form IT:
+                            </label>
+                            <textarea
+                              name="notes"
+                              defaultValue={ticket.notes}
+                              disabled={isReadOnly}
+                              className="form-control"
+                              rows="2"
+                              placeholder="Tambahkan catatan tindak lanjut di sini..."
+                              style={{
+                                width: "100%",
+                                padding: "8px",
+                                backgroundColor: "#333",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                resize: "vertical",
+                                opacity: isReadOnly ? 0.6 : 1,
+                                cursor: isReadOnly ? "not-allowed" : "text",
+                              }}
+                            ></textarea>
+                          </div>
+                          <div>
+                            <label
+                              style={{
+                                fontSize: "0.85rem",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              Assign to:
+                            </label>
+                            <select
+                              name="assignedToId"
+                              defaultValue={
+                                ticket.assignedTo?.id ||
+                                ticket.assignedToId ||
+                                ""
+                              }
+                              disabled={isReadOnly}
+                              className="form-control"
+                              style={{
+                                width: "100%",
+                                padding: "8px",
+                                backgroundColor: "rgba(51, 51, 51, 1)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                opacity: isReadOnly ? 0.6 : 1,
+                                cursor: isReadOnly ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              <option value="">
+                                Pilih Engineer (Biarkan kosong jika belum)
+                              </option>
+                              {engineers.map((eng) => (
+                                <option key={eng.id} value={eng.id}>
+                                  {eng.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label
+                              style={{
+                                fontSize: "0.85rem",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              Status Tiket:
+                            </label>
+                            <select
+                              name="status"
+                              defaultValue={ticket.status}
+                              disabled={isReadOnly}
+                              className="form-control"
+                              style={{
+                                width: "100%",
+                                padding: "8px",
+                                backgroundColor: "rgba(51, 51, 51, 1)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                opacity: isReadOnly ? 0.6 : 1,
+                                cursor: isReadOnly ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              <option value="OPEN">Open</option>
+                              <option value="ASSIGNED">Assigned</option>
+                              <option value="IN_PROGRESS">In Progress</option>
+                              <option value="HOLD">Hold</option>
+                              <option value="RESOLVED">Resolved</option>
+                            </select>
+                          </div>
+                          {!isReadOnly ? (
+                            <button
+                              type="submit"
+                              className="btn btn-primary"
+                              style={{ marginTop: "10px", width: "100%" }}
+                            >
+                              Simpan Perubahan
+                            </button>
+                          ) : (
+                            <div
+                              style={{
+                                marginTop: "10px",
+                                textAlign: "center",
+                                fontSize: "0.85rem",
+                                color: "#f59e0b",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              Tiket sedang ditangani oleh engineer.
+                            </div>
+                          )}
+                        </form>
+                      </>
                     ) : (
+                      /* --- TAMPILAN JIKA TIKET RESOLVED (EVALUASI SLA) --- */
                       <div
                         style={{
                           textAlign: "center",
                           padding: "1rem",
-                          backgroundColor: "rgba(39, 174, 96, 0.1)",
-                          color: "#27ae60",
+                          backgroundColor: ticket.isSlaBreached
+                            ? "rgba(220, 53, 69, 0.1)"
+                            : "rgba(39, 174, 96, 0.1)",
+                          color: ticket.isSlaBreached ? "#ef4444" : "#22c55e",
+                          border: `1px solid ${ticket.isSlaBreached ? "#ef4444" : "#22c55e"}`,
                           borderRadius: "5px",
-                          fontWeight: "bold",
                         }}
                       >
-                        Tiket telah diselesaikan (Resolved)
+                        <h5
+                          style={{ margin: "0 0 10px 0", fontWeight: "bold" }}
+                        >
+                          {ticket.isSlaBreached
+                            ? "❌ SLA Tidak Terpenuhi (Melebihi Waktu)"
+                            : "✅ SLA Terpenuhi (Tepat Waktu)"}
+                        </h5>
+                        <div
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          Diselesaikan pada:{" "}
+                          {ticket.resolvedAt
+                            ? new Date(ticket.resolvedAt).toLocaleString()
+                            : "-"}
+                        </div>
                         {ticket.notes && (
                           <p
                             style={{

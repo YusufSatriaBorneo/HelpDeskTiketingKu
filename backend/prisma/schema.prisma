@@ -17,6 +17,7 @@ enum Role {
 enum Status {
   OPEN
   ASSIGNED
+  IN_PROGRESS
   HOLD
   RESOLVED
 }
@@ -34,29 +35,42 @@ model User {
 }
 
 model Ticket {
-  id            Int             @id @default(autoincrement())
-  ticketNumber  String          @unique 
-  title         String
-  description   String
-  hostname      String?
-  category      String?
-  subCategory   String?
-  attachmentUrl String?
-  priority      String?         @default("Standard")
-  notes         String?
+  id               Int           @id @default(autoincrement())
+  ticketNumber     String        @unique 
+  title            String
+  description      String
+  hostname         String?
+  category         String?
+  subCategory      String?
+  attachmentUrl    String?
+  priority         String?       @default("Standard")
+  notes            String?
 
-  status        Status          @default(OPEN)
+  status           Status        @default(OPEN)
   
-  createdById   Int
-  createdBy     User            @relation("CreatedTickets", fields: [createdById], references: [id])
-  
-  assignedToId  Int?
-  assignedTo    User?           @relation("AssignedTickets", fields: [assignedToId], references: [id])
-  
-  histories     TicketHistory[] // <-- TAMBAHAN BARU
+  // --- TAMBAHAN KOLOM SLA & PAUSE ---
+  slaMinutes       Int           @default(120)
+  slaTarget      DateTime?
+  pausedAt         DateTime?     
+  totalPausedMin   Int           @default(0)  
+  isSlaBreached    Boolean       @default(false) 
+  // ---------------------------------
+// <-- 2. TAMBAHKAN 2 KOLOM INI -->
+  workStartedAt  DateTime? // Kapan tiket pertama kali di "In Progress"
+  resolvedAt     DateTime? // Kapan tiket berstatus "Resolved"
+  actualWorkMin Int?
+  // ---------------------------------
 
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdById      Int
+  createdBy        User          @relation("CreatedTickets", fields: [createdById], references: [id])
+  
+  assignedToId     Int?
+  assignedTo       User?         @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  
+  histories        TicketHistory[]
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 }
 
 // ==========================================

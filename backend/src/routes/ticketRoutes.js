@@ -63,7 +63,7 @@ const upload = multer({
 // Middleware autentikasi untuk semua route di bawahnya
 router.use(authenticateToken);
 
-// --- 3. ROUTE POST (Buat Tiket) ---
+// --- 3. ROUTE POST (Buat Tiket) dan Tambahkan SLA ---
 router.post(
   "/",
   authorizeRole(["USER"]),
@@ -95,6 +95,14 @@ router.post(
       const sequenceString = nextSequence.toString().padStart(4, "0");
       const newTicketNumber = `${currentYear}${sequenceString}`;
 
+      // --- TAMBAHKAN LOGIKA SLA 5 MENIT DI SINI ---
+      const createdAt = new Date();
+      const slaMinutesLimit = 5; // Batas SLA = 5 Menit
+      // Hitung batas waktu SLA (waktu saat ini + 5 menit)
+      const slaTargetDate = new Date(
+        createdAt.getTime() + slaMinutesLimit * 60000,
+      );
+
       const ticket = await prisma.ticket.create({
         data: {
           ticketNumber: newTicketNumber,
@@ -105,6 +113,10 @@ router.post(
           subCategory,
           attachmentUrl,
           createdById: req.user.id,
+          createdAt: createdAt, // Simpan waktu pembuatan secara eksplisit
+          slaMinutes: slaMinutesLimit, // Simpan durasi 5 untuk kebutuhan route Resolve/Update
+          slaTarget: slaTargetDate, // Simpan tanggal target (misal: jam 10:05) untuk ditampilkan di Frontend
+          isSlaBreached: false, // Default belum breached
         },
       });
 
@@ -230,7 +242,7 @@ router.put("/:id/assign", authorizeRole(["HELPDESK"]), async (req, res) => {
   }
 });
 
-// --- 7. ROUTE PUT RESOLVE (Engineer Resolve & Pencatatan History) ---
+// --- 7. ROUTE PUT RESOLVE (Engineer Resolve & Pencatatan History + UPDATE SLA) ---
 router.put("/:id/resolve", authorizeRole(["ENGINEER"]), async (req, res) => {
   const ticketId = parseInt(req.params.id);
 
@@ -243,10 +255,34 @@ router.put("/:id/resolve", authorizeRole(["ENGINEER"]), async (req, res) => {
         .json({ message: "Not authorized to resolve this ticket" });
     }
 
+    // --- TAMBAHAN KALKULASI SLA UNTUK ROUTE RESOLVE ---
+    const now = new Date();
+
+    // PERBAIKAN 1: Start selalu dari waktu tiket DIBUAT (createdAt)
+    const start = ticket.createdAt;
+    const totalDurationKotorMin = Math.floor((now - new Date(start)) / 60000);
+
+    // PERBAIKAN 2: Jika tiket statusnya sedang HOLD saat di-resolve, hitung waktu HOLD terakhirnya
+    let currentHoldMin = 0;
+    if (ticket.status === "HOLD" && ticket.pausedAt) {
+      currentHoldMin = Math.floor((now - new Date(ticket.pausedAt)) / 60000);
+    }
+
+    const finalTotalPausedMin = (ticket.totalPausedMin || 0) + currentHoldMin;
+    const actualWorkMin = totalDurationKotorMin - finalTotalPausedMin;
+    const isSlaBreached = actualWorkMin > (ticket.slaMinutes || 0);
+    // ---------------------------------------------------
+
     const updatedTicket = await prisma.ticket.update({
       where: { id: ticketId },
       data: {
         status: "RESOLVED",
+        resolvedAt: now,
+        isSlaBreached: isSlaBreached,
+        actualWorkMin: actualWorkMin,
+        workStartedAt: null,
+        pausedAt: null, // Pastikan pause di-reset
+        totalPausedMin: finalTotalPausedMin, // Simpan total pause yang baru
         histories: {
           create: {
             status: "RESOLVED",
@@ -294,6 +330,71 @@ router.put(
       if (notes !== undefined) updateData.notes = notes;
       if (status !== undefined) updateData.status = status;
 
+      // ====================================================
+      // LOGIKA SLA, PAUSE, RESUME, DAN PENGERJAAN
+      // ====================================================
+      const oldStatus = existingTicket.status;
+      if (status !== undefined && status !== oldStatus) {
+        const now = new Date();
+
+        // 1. KETIKA TIKET DI-HOLD (PAUSE)
+        if (status === "HOLD" && oldStatus !== "HOLD") {
+          updateData.pausedAt = now;
+        }
+
+        // 2. KETIKA TIKET LEPAS DARI HOLD (Bisa ke IN_PROGRESS atau langsung RESOLVED)
+        else if (oldStatus === "HOLD" && status !== "HOLD") {
+          if (existingTicket.pausedAt) {
+            const pausedDurationMinutes = Math.floor(
+              (now - new Date(existingTicket.pausedAt)) / 60000,
+            );
+            updateData.totalPausedMin =
+              (existingTicket.totalPausedMin || 0) + pausedDurationMinutes;
+            updateData.pausedAt = null; // Reset pausedAt karena tiket aktif kembali
+          }
+        }
+
+        // 3. KETIKA TIKET MULAI DIKERJAKAN (IN PROGRESS)
+        if (status === "IN_PROGRESS") {
+          // Hanya catat waktu mulai jika tiket belum pernah dikerjakan (workStartedAt masih kosong)
+          if (!existingTicket.workStartedAt) {
+            updateData.workStartedAt = now;
+          }
+        }
+
+        // 4. KETIKA TIKET SELESAI (RESOLVED)
+        if (status === "RESOLVED") {
+          const now = new Date();
+          updateData.resolvedAt = now;
+
+          // PERBAIKAN: Selalu gunakan createdAt sebagai titik awal SLA
+          const start = existingTicket.createdAt;
+
+          // Hitung durasi total dari awal sampai akhir dalam menit
+          const totalDurationKotorMin = Math.floor(
+            (now - new Date(start)) / 60000,
+          );
+
+          // Ambil total menit pause
+          const finalTotalPausedMin =
+            updateData.totalPausedMin !== undefined
+              ? updateData.totalPausedMin
+              : existingTicket.totalPausedMin || 0;
+
+          // Hitung durasi kerja murni (total durasi kotor dikurangi total pause)
+          const actualWorkMin = totalDurationKotorMin - finalTotalPausedMin;
+
+          // Tentukan apakah SLA terpenuhi (false) atau lewat (true)
+          updateData.isSlaBreached =
+            actualWorkMin > (existingTicket.slaMinutes || 0);
+          updateData.actualWorkMin = actualWorkMin;
+
+          updateData.workStartedAt = null; // Reset waktu kerja
+          updateData.pausedAt = null; // Reset waktu pause
+        }
+      }
+      // ====================================================
+
       // Perbaikan: Tidak mengubah assignedToId menjadi null jika form kosong/tidak diubah
       const targetEngineerId =
         assignedToId !== undefined ? assignedToId : engineerId;
@@ -303,10 +404,11 @@ router.put(
         }
       }
 
+      // Catat History Update ke tabel TicketHistory otomatis menggunakan fitur Prisma Nested Writes
       updateData.histories = {
         create: {
           status: finalStatus,
-          note: notes || "Melakukan update tiket",
+          note: notes || `Status diubah menjadi ${finalStatus}`,
           updatedById: req.user.id,
         },
       };
@@ -321,7 +423,7 @@ router.put(
         },
       });
 
-      // Di dalam route /:id/update
+      // Trigger Webhook
       if (status === "RESOLVED" || status === "HOLD" || status === "PENDING") {
         triggerN8nWebhook(updatedTicket);
       }
@@ -335,4 +437,5 @@ router.put(
     }
   },
 );
+
 module.exports = router;

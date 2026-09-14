@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 
 const EngineerDashboard = () => {
-  const { token } = useAuth();
+  const { token } = useAuth(); // logout tidak lagi dipanggil di sini
   const [tickets, setTickets] = useState([]);
   const [engineers, setEngineers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,6 +58,7 @@ const EngineerDashboard = () => {
   useEffect(() => {
     fetchTickets();
     fetchEngineers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const handleUpdateTicket = async (e, ticketId) => {
@@ -84,7 +85,7 @@ const EngineerDashboard = () => {
 
       if (res.ok) {
         alert("Data tiket berhasil diperbarui!");
-        fetchTickets(); // Refresh data untuk mendapatkan log history terbaru
+        fetchTickets();
       } else {
         const errorData = await res.json();
         alert(`Gagal memperbarui tiket: ${errorData.message}`);
@@ -95,7 +96,6 @@ const EngineerDashboard = () => {
     }
   };
 
-  // Fungsi toggle Log History
   const toggleLogs = (ticketId) => {
     setShowLogs((prev) => ({
       ...prev,
@@ -103,16 +103,55 @@ const EngineerDashboard = () => {
     }));
   };
 
-  const formatDateTime = (dateString) => {
-    if (!dateString) return "-";
-    const options = {
+  const formatDate = (isoString) => {
+    if (!isoString) return "-";
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString; // Jika bukan format date, return raw string
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
       year: "numeric",
-      month: "short",
-      day: "numeric",
+    });
+  };
+
+  const formatTime = (isoString) => {
+    if (!isoString) return "-";
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return "";
+    return date.toLocaleTimeString("id-ID", {
       hour: "2-digit",
       minute: "2-digit",
-    };
-    return new Date(dateString).toLocaleDateString("id-ID", options);
+    });
+  };
+
+  // Utility untuk memformat dan mencari nilai SLA dari API
+  // Utility untuk memformat dan mencari nilai SLA dari API
+  const getFormattedSLA = (ticket) => {
+    // Sebaiknya prioritaskan property yang bertipe tanggal (deadline/due date)
+    // sebelum property yang bertipe durasi angka (sla / slaTime)
+    const rawSLA =
+      ticket.slaDeadline ||
+      ticket.sla_due_date ||
+      ticket.dueDate ||
+      ticket.slaTime ||
+      ticket.sla;
+
+    if (!rawSLA) return ""; // Default jika tidak ada nilai
+
+    // 1. CEK ANGKA: Jika nilai rawSLA adalah angka murni atau string angka (misal: 60, "120")
+    // Ini mencegah durasi angka diproses menjadi tanggal tahun 1970
+    if (!isNaN(rawSLA) && rawSLA !== null && rawSLA !== "") {
+      return `${rawSLA} Menit`; // Ubah "Menit" menjadi "Jam" jika backend mengirim satuan jam
+    }
+
+    // 2. CEK TANGGAL: Jika bukan angka, coba ubah menggunakan fungsi formatDate Anda
+    const formattedDate = formatDate(rawSLA);
+    if (formattedDate !== rawSLA) {
+      return `${formattedDate} ${formatTime(rawSLA)}`;
+    }
+
+    // 3. TEKS BIASA: Kembalikan string asli jika bukan tanggal & bukan angka murni (misal: "2 Jam", "1 Hari")
+    return rawSLA;
   };
 
   const actionTickets = tickets.filter((t) => t.status !== "RESOLVED");
@@ -172,6 +211,7 @@ const EngineerDashboard = () => {
     <div
       style={{ display: "flex", alignItems: "flex-start", minHeight: "100vh" }}
     >
+      {/* SIDEBAR */}
       <aside
         style={{
           width: "280px",
@@ -182,7 +222,6 @@ const EngineerDashboard = () => {
           borderRight: "1px solid var(--border-color)",
           display: "flex",
           flexDirection: "column",
-          justifyContent: "flex-start",
           gap: "8px",
           overflowY: "auto",
         }}
@@ -247,8 +286,10 @@ const EngineerDashboard = () => {
             </button>
           </div>
         </div>
+        {/* Tombol Logout Dihapus Sesuai Permintaan */}
       </aside>
 
+      {/* MAIN CONTENT */}
       <main style={{ flex: 1, padding: "2rem 3rem" }}>
         <div
           style={{
@@ -268,6 +309,7 @@ const EngineerDashboard = () => {
                   : "Riwayat tiket yang telah Anda selesaikan."}
             </p>
           </div>
+          {/* Tombol Refresh Dihapus Sesuai Permintaan */}
         </div>
 
         {error && (
@@ -326,6 +368,7 @@ const EngineerDashboard = () => {
                     {openCount}
                   </p>
                 </div>
+
                 <div
                   className="card"
                   style={{
@@ -341,7 +384,7 @@ const EngineerDashboard = () => {
                       color: "var(--text-secondary)",
                     }}
                   >
-                    Hold / Pending
+                    Hold
                   </h3>
                   <p
                     style={{
@@ -354,6 +397,7 @@ const EngineerDashboard = () => {
                     {holdCount}
                   </p>
                 </div>
+
                 <div
                   className="card"
                   style={{
@@ -429,17 +473,21 @@ const EngineerDashboard = () => {
                         </div>
                         <span
                           style={{
-                            padding: "8px 16px",
-                            borderRadius: "8px",
-                            fontSize: "0.85rem",
+                            padding: "6px 14px",
+                            borderRadius: "6px",
+                            fontSize: "0.8rem",
                             fontWeight: "bold",
                             textTransform: "uppercase",
-                            letterSpacing: "0.025em",
                             color: "white",
                             backgroundColor:
                               ticket.status === "RESOLVED"
                                 ? "#14b8a6"
-                                : "#3b82f6",
+                                : ticket.status === "OPEN" ||
+                                    ticket.status === "ASSIGNED"
+                                  ? "#3b82f6"
+                                  : ticket.status === "HOLD"
+                                    ? "#f59e0b"
+                                    : "#6b7280",
                           }}
                         >
                           {ticket.status}
@@ -448,65 +496,83 @@ const EngineerDashboard = () => {
 
                       <div
                         style={{
-                          backgroundColor: "rgba(128, 128, 128, 0.15)",
-                          padding: "10px",
-                          borderRadius: "5px",
-                          marginBottom: "10px",
+                          backgroundColor: "rgba(128, 128, 128, 0.08)",
+                          padding: "12px",
+                          borderRadius: "8px",
+                          marginBottom: "15px",
                           fontSize: "0.9rem",
+                          lineHeight: "1.6",
+                          border: "1px solid rgba(128,128,128,0.15)",
                         }}
                       >
-                        <strong>Kategori:</strong> {ticket.category || "-"} (
-                        {ticket.subCategory || "-"})<br />
-                        <strong>Hostname:</strong> {ticket.hostname || "-"}{" "}
-                        <br />
-                        <strong>Priority:</strong>{" "}
-                        {ticket.priority || "Standard"}
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <span>
+                            <strong>Kategori:</strong> {ticket.category || "-"}{" "}
+                            ({ticket.subCategory || "-"})
+                          </span>
+                          <span>
+                            <strong>Priority:</strong>{" "}
+                            <span
+                              style={{
+                                color:
+                                  ticket.priority === "High"
+                                    ? "#dc3545"
+                                    : "inherit",
+                              }}
+                            >
+                              {ticket.priority || "-"}
+                            </span>
+                          </span>
+                        </div>
+                        <div>
+                          <strong>
+                            Creator: {ticket.createdBy?.name || "User"} (
+                            {ticket.createdBy?.email})<br />
+                            Created:{" "}
+                            {new Date(ticket.createdAt).toLocaleDateString()}
+                          </strong>
+                        </div>
+                        <div>
+                          <strong>Hostname:</strong> {ticket.hostname || "-"}
+                        </div>
+                        <div>
+                          <strong>Assigned to:</strong>{" "}
+                          {ticket.assignedTo?.name || "Belum di-assign"}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: "4px",
+                            paddingTop: "4px",
+                            borderTop: "1px solid rgba(128,128,128,0.2)",
+                          }}
+                        >
+                          <strong>SLA Target:</strong>
+                          {" 5 Menit "}
+                          <span style={{ color: "#d97706", fontWeight: "600" }}>
+                            {getFormattedSLA(ticket)}
+                          </span>
+                        </div>
                       </div>
 
                       <p
                         style={{
                           color: "var(--text-secondary)",
                           marginBottom: "1rem",
+                          fontSize: "0.95rem",
                         }}
                       >
                         {ticket.description}
                       </p>
 
-                      {ticket.attachmentUrl && (
-                        <div style={{ marginBottom: "1rem" }}>
-                          <a
-                            href={`http://localhost:5000/${ticket.attachmentUrl.replace(
-                              /\\/g,
-                              "/",
-                            )}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              color: "#4da6ff",
-                              textDecoration: "none",
-                              fontSize: "0.9rem",
-                            }}
-                          >
-                            📎 Lihat Lampiran
-                          </a>
-                        </div>
-                      )}
-
-                      <div
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--text-secondary)",
-                          marginBottom: "1.5rem",
-                        }}
-                      >
-                        Created by: {ticket.createdBy?.name} (
-                        {ticket.createdBy?.email})<br />
-                        Created at: {formatDateTime(ticket.createdAt)}
-                      </div>
-
                       <hr
                         style={{
-                          border: "1px solid var(--border-color)",
+                          border: "none",
+                          borderTop: "1px dashed var(--border-color)",
                           marginBottom: "1rem",
                         }}
                       />
@@ -517,7 +583,7 @@ const EngineerDashboard = () => {
                           style={{
                             display: "flex",
                             flexDirection: "column",
-                            gap: "10px",
+                            gap: "12px",
                           }}
                         >
                           <div>
@@ -525,6 +591,8 @@ const EngineerDashboard = () => {
                               style={{
                                 fontSize: "0.85rem",
                                 color: "var(--text-secondary)",
+                                marginBottom: "4px",
+                                display: "block",
                               }}
                             >
                               Status Tiket:
@@ -535,14 +603,15 @@ const EngineerDashboard = () => {
                               className="form-control"
                               style={{
                                 width: "100%",
-                                padding: "8px",
+                                padding: "8px 12px",
                                 backgroundColor: "#333",
                                 color: "white",
-                                border: "none",
-                                borderRadius: "4px",
+                                border: "1px solid #444",
+                                borderRadius: "6px",
                               }}
                             >
                               <option value="OPEN">Open</option>
+                              <option value="IN_PROGRESS">In Progress</option>
                               <option value="ASSIGNED">Assigned</option>
                               <option value="HOLD">Hold</option>
                               <option value="RESOLVED">Resolved</option>
@@ -554,27 +623,31 @@ const EngineerDashboard = () => {
                               style={{
                                 fontSize: "0.85rem",
                                 color: "var(--text-secondary)",
+                                marginBottom: "4px",
+                                display: "block",
                               }}
                             >
-                              Assign ke Engineer:
+                              Re-Assign ke Engineer Lain (Opsional):
                             </label>
                             <select
                               name="engineerId"
-                              defaultValue={ticket.assignedToId || ""}
+                              defaultValue=""
                               className="form-control"
                               style={{
                                 width: "100%",
-                                padding: "8px",
+                                padding: "8px 12px",
                                 backgroundColor: "#333",
                                 color: "white",
-                                border: "none",
-                                borderRadius: "4px",
+                                border: "1px solid #444",
+                                borderRadius: "6px",
                               }}
                             >
-                              <option value="">-- Pilih Engineer --</option>
+                              <option value="">
+                                -- Tetap kerjakan sendiri --
+                              </option>
                               {engineers.map((eng) => (
                                 <option key={eng.id} value={eng.id}>
-                                  {eng.name} ({eng.email})
+                                  {eng.name}
                                 </option>
                               ))}
                             </select>
@@ -585,9 +658,11 @@ const EngineerDashboard = () => {
                               style={{
                                 fontSize: "0.85rem",
                                 color: "var(--text-secondary)",
+                                marginBottom: "4px",
+                                display: "block",
                               }}
                             >
-                              Catatan Engineer / Helpdesk:
+                              Catatan Engineer:
                             </label>
                             <textarea
                               name="notes"
@@ -595,14 +670,15 @@ const EngineerDashboard = () => {
                               className="form-control"
                               style={{
                                 width: "100%",
-                                padding: "8px",
+                                padding: "10px 12px",
                                 backgroundColor: "#333",
                                 color: "white",
-                                border: "none",
-                                borderRadius: "4px",
+                                border: "1px solid #444",
+                                borderRadius: "6px",
+                                resize: "vertical",
                               }}
-                              rows="2"
-                              placeholder="Tambahkan update atau catatan di sini..."
+                              rows="3"
+                              placeholder="Tambahkan catatan update atau resolusi tiket..."
                             ></textarea>
                           </div>
 
@@ -610,9 +686,15 @@ const EngineerDashboard = () => {
                             type="submit"
                             className="btn btn-primary"
                             style={{
-                              marginTop: "10px",
+                              marginTop: "5px",
                               width: "100%",
                               cursor: "pointer",
+                              padding: "10px",
+                              borderRadius: "6px",
+                              fontWeight: "600",
+                              backgroundColor: "#3b82f6",
+                              color: "white",
+                              border: "none",
                             }}
                           >
                             Simpan Perubahan
@@ -624,52 +706,87 @@ const EngineerDashboard = () => {
                             textAlign: "center",
                             padding: "1rem",
                             backgroundColor: "rgba(39, 174, 96, 0.1)",
-                            color: "#27ae60",
-                            borderRadius: "5px",
-                            fontWeight: "bold",
+                            border: "1px solid rgba(39, 174, 96, 0.3)",
+                            borderRadius: "6px",
                           }}
                         >
-                          Tiket telah diselesaikan (Resolved)
+                          {/* INFORMASI SLA DI CARD TIKET ENGINEER */}
+                          <div style={{ marginTop: "8px", fontSize: "0.9rem" }}>
+                            {ticket.status === "RESOLVED" ||
+                            ticket.status === "CLOSED" ? (
+                              <span
+                                style={{
+                                  color: ticket.isSlaBreached
+                                    ? "#dc2626"
+                                    : "#059669",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                {ticket.isSlaBreached
+                                  ? "❌ SLA Tidak Terpenuhi (Melebihi Waktu)"
+                                  : "✅ SLA Terpenuhi"}
+                              </span>
+                            ) : (
+                              <span
+                                style={{ color: "#d97706", fontWeight: "bold" }}
+                              >
+                                ⏳ Sedang Berjalan
+                              </span>
+                            )}
+                          </div>
                           {ticket.notes && (
                             <p
                               style={{
-                                marginTop: "10px",
+                                marginTop: "12px",
+                                padding: "10px",
+                                backgroundColor: "rgba(0,0,0,0.05)",
+                                borderRadius: "4px",
                                 fontSize: "0.85rem",
                                 color: "var(--text-secondary)",
-                                fontWeight: "normal",
                                 textAlign: "left",
+                                borderLeft: "3px solid #27ae60",
                               }}
                             >
+                              <div
+                                style={{
+                                  fontSize: "0.85rem",
+                                  color: "var(--text-secondary)",
+                                }}
+                              >
+                                Diselesaikan pada:{" "}
+                                {ticket.resolvedAt
+                                  ? new Date(ticket.resolvedAt).toLocaleString()
+                                  : "-"}
+                              </div>
                               <strong>Catatan Akhir:</strong> {ticket.notes}
                             </p>
                           )}
                         </div>
                       )}
 
-                      {/* --- START FITUR LOG HISTORY --- */}
+                      {/* --- TOMBOL TOGGLE & TABEL HISTORICAL LOG --- */}
                       <button
                         type="button"
                         onClick={() => toggleLogs(ticket.id)}
                         style={{
-                          marginTop: "15px",
-                          backgroundColor: "transparent",
-                          color: "#3b82f6",
-                          border: "1px solid #3b82f6",
-                          padding: "6px 12px",
-                          borderRadius: "4px",
+                          marginTop: "20px",
+                          backgroundColor: showLogs[ticket.id]
+                            ? "#e2e8f0"
+                            : "transparent",
+                          color: "#475569",
+                          border: "1px solid #cbd5e1",
+                          padding: "8px 12px",
+                          borderRadius: "6px",
                           cursor: "pointer",
                           fontSize: "0.85rem",
+                          fontWeight: "500",
                           width: "100%",
-                          display: "flex",
-                          justifyContent: "center",
-                          alignItems: "center",
-                          gap: "8px",
                           transition: "all 0.2s",
                         }}
                       >
                         {showLogs[ticket.id]
-                          ? "🔼 Sembunyikan Log History"
-                          : "🔽 Lihat Log History"}
+                          ? "🔼 Tutup Log History"
+                          : "🔽 Buka Log History"}
                       </button>
 
                       {showLogs[ticket.id] && (
@@ -693,8 +810,6 @@ const EngineerDashboard = () => {
                           >
                             Riwayat Pembaruan:
                           </h5>
-
-                          {/* Diubah dari ticket.logs menjadi ticket.histories */}
                           {ticket.histories && ticket.histories.length > 0 ? (
                             <ul
                               style={{
@@ -722,8 +837,7 @@ const EngineerDashboard = () => {
                                     }}
                                   >
                                     <strong style={{ color: "#4da6ff" }}>
-                                      {log.updatedBy?.name ||
-                                        "Sistem / Engineer"}
+                                      {log.updatedBy?.name || "System"}
                                     </strong>
                                     <span
                                       style={{
@@ -731,14 +845,15 @@ const EngineerDashboard = () => {
                                         fontSize: "0.75rem",
                                       }}
                                     >
-                                      {formatDateTime(log.createdAt)}
+                                      {/* Menggunakan formatDate dan formatTime agar tidak error di komponen Engineer */}
+                                      {formatDate(log.createdAt)}{" "}
+                                      {formatTime(log.createdAt)}
                                     </span>
                                   </div>
                                   <div style={{ marginBottom: "2px" }}>
                                     Status diubah menjadi:{" "}
                                     <strong>{log.status}</strong>
                                   </div>
-                                  {/* Diubah dari log.notes menjadi log.note */}
                                   {log.note && (
                                     <div
                                       style={{
@@ -767,21 +882,31 @@ const EngineerDashboard = () => {
                           )}
                         </div>
                       )}
-                      {/* --- END FITUR LOG HISTORY --- */}
                     </div>
                   ))}
                   {filteredTickets.length === 0 && (
-                    <p
+                    <div
                       style={{
                         gridColumn: "1 / -1",
                         color: "var(--text-secondary)",
                         textAlign: "center",
-                        padding: "2rem",
+                        padding: "3rem",
+                        backgroundColor: "rgba(0,0,0,0.02)",
+                        borderRadius: "8px",
+                        border: "1px dashed #cbd5e1",
                       }}
                     >
-                      Pencarian tidak ditemukan atau belum ada tiket di kategori
-                      ini.
-                    </p>
+                      <span
+                        style={{
+                          fontSize: "2rem",
+                          display: "block",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        📭
+                      </span>
+                      Tidak ada tiket di kategori ini.
+                    </div>
                   )}
                 </div>
               </>

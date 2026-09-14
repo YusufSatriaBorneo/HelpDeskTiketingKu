@@ -35,5 +35,16 @@ services:
     depends_on:
       - backend
 
+  # --------------------------------------------------
+  # TAMBAHAN BARU: Web UI Adminer untuk Kelola Database
+  # --------------------------------------------------
+  adminer:
+    image: adminer
+    container_name: helpdesk-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
 volumes:
   postgres-data:
