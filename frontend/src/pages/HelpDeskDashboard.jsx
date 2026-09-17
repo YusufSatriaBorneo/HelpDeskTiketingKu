@@ -19,6 +19,7 @@ const HelpDeskDashboard = () => {
   const [tickets, setTickets] = useState([]);
   const [engineers, setEngineers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterDate, setFilterDate] = useState("");
   const [showLogs, setShowLogs] = useState({});
 
   // STATE: Mengontrol tab aktif di sidebar (Default sekarang adalah 'home')
@@ -137,13 +138,22 @@ const HelpDeskDashboard = () => {
         ? historyTickets
         : [];
 
+  // Filter tiket berdasarkan Tab Aktif, Nomor Tiket/Judul, dan Tanggal
   const filteredTickets = currentTabTickets.filter((ticket) => {
-    const searchLower = searchQuery.toLowerCase();
-    const ticketNo = ticket.ticketNumber
-      ? ticket.ticketNumber.toLowerCase()
-      : "";
-    const titleLower = ticket.title ? ticket.title.toLowerCase() : "";
-    return ticketNo.includes(searchLower) || titleLower.includes(searchLower);
+    // 1. Pencarian berdasarkan Nomor Tiket atau Judul (menggunakan searchQuery)
+    const searchLower = searchQuery.toLowerCase().trim();
+    const matchesSearch = searchLower
+      ? (ticket.ticketNo &&
+          ticket.ticketNo.toLowerCase().includes(searchLower)) ||
+        (ticket.title && ticket.title.toLowerCase().includes(searchLower))
+      : true;
+
+    // 2. Pencarian berdasarkan Tanggal (Format YYYY-MM-DD)
+    const matchesDate = filterDate
+      ? ticket.createdAt && ticket.createdAt.startsWith(filterDate)
+      : true;
+
+    return matchesSearch && matchesDate;
   });
 
   // ================= DATA PROCESSING UNTUK LEADERBOARD & CHART =================
@@ -261,6 +271,36 @@ const HelpDeskDashboard = () => {
     }
   };
 
+  const handleExportData = () => {
+    if (filteredTickets.length === 0) {
+      alert("Tidak ada data untuk di-export.");
+      return;
+    }
+
+    // 1. Buat Header CSV
+    const headers = [
+      "Ticket No,Title,Status,Priority,Category,Hostname,Created At,Engineer",
+    ];
+
+    // 2. Map data ke format CSV
+    const csvData = filteredTickets.map((t) => {
+      // Escape tanda kutip ganda jika ada koma di dalam teks
+      return `"${t.ticketNo || ""}", "${t.title || ""}", "${t.status}", "${t.priority || ""}", "${t.category || ""}", "${t.hostname || ""}", "${new Date(t.createdAt).toLocaleDateString()}", "${t.assignedTo?.name || "-"}"`;
+    });
+
+    // 3. Gabungkan dan buat file Blob
+    const csvString = headers.concat(csvData).join("\n");
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    // 4. Trigger download
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `History_Tickets_${filterDate || "All"}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   return (
     <div
       style={{ display: "flex", alignItems: "flex-start", minHeight: "100vh" }}
@@ -647,15 +687,54 @@ const HelpDeskDashboard = () => {
         {/* ================= TAMPILAN TAB IT-ACTION & HISTORY ================= */}
         {activeTab !== "home" && (
           <>
-            <div style={{ marginBottom: "2rem" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "1rem",
+                marginBottom: "2rem",
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              {/* Input Pencarian Teks */}
               <input
                 type="text"
                 className="form-control"
                 placeholder="🔍 Cari Nomor Tiket (misal: 20260001) atau Judul..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ width: "100%", maxWidth: "400px", padding: "0.75rem" }}
+                style={{ flex: 1, minWidth: "250px", padding: "0.75rem" }}
               />
+
+              {/* Input Pencarian Tanggal */}
+              <input
+                type="date"
+                className="form-control"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                style={{ width: "200px", padding: "0.75rem" }}
+              />
+
+              {/* Tombol Export (Hanya muncul di tab History) */}
+              {activeTab === "history" && (
+                <button
+                  onClick={handleExportData}
+                  style={{
+                    padding: "0.75rem 1.5rem",
+                    backgroundColor: "#10b981",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  📥 Export Data
+                </button>
+              )}
             </div>
 
             <div className="grid-2">
@@ -725,8 +804,9 @@ const HelpDeskDashboard = () => {
                     >
                       <strong>Kategori:</strong> {ticket.category || "-"} (
                       {ticket.subCategory || "-"})<br />
-                      <strong>Hostname / IP Adress:</strong>{" "}
+                      <strong>Hostname / IP Adress:</strong> <br />
                       {ticket.hostname || "-"}
+                      <strong>Phone Number:</strong> {ticket.phoneDir || "-"}
                     </div>
 
                     <p

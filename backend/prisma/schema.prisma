@@ -39,6 +39,7 @@ model Ticket {
   ticketNumber     String        @unique 
   title            String
   description      String
+  phoneDir         String?
   hostname         String?
   category         String?
   subCategory      String?

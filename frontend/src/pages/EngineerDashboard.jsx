@@ -541,6 +541,10 @@ const EngineerDashboard = () => {
                           <strong>Hostname:</strong> {ticket.hostname || "-"}
                         </div>
                         <div>
+                          <strong>Phone Number:</strong>{" "}
+                          {ticket.phoneDir || "-"}
+                        </div>
+                        <div>
                           <strong>Assigned to:</strong>{" "}
                           {ticket.assignedTo?.name || "Belum di-assign"}
                         </div>

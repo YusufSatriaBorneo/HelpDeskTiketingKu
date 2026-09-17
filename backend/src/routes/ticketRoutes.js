@@ -6,6 +6,7 @@ const {
 } = require("../middleware/authMiddleware");
 const multer = require("multer");
 const path = require("path");
+const ExcelJS = require("exceljs");
 const router = express.Router();
 
 // --- 1. HELPER: TRIGGER WEBHOOK N8N (NOMOR HP DEFAULT) ---
@@ -69,7 +70,8 @@ router.post(
   authorizeRole(["USER"]),
   upload.single("attachment"),
   async (req, res) => {
-    const { title, description, hostname, category, subCategory } = req.body;
+    const { title, description, hostname, category, subCategory, phoneDir } =
+      req.body;
     const attachmentUrl = req.file ? req.file.path : null;
 
     if (!title || !description) {
@@ -108,6 +110,7 @@ router.post(
           ticketNumber: newTicketNumber,
           title,
           description,
+          phoneDir,
           hostname,
           category,
           subCategory,
@@ -202,6 +205,109 @@ router.get(
       res
         .status(500)
         .json({ message: "Error fetching engineers", error: error.message });
+    }
+  },
+);
+
+// --- 5b. ROUTE GET EXPORT EXCEL (Laporan Tiket) ---
+router.get(
+  "/export",
+  authorizeRole(["HELPDESK"]), // Sesuaikan jika Engineer/Admin juga boleh akses
+  async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+
+      if (!startDate || !endDate) {
+        return res
+          .status(400)
+          .json({ message: "startDate dan endDate harus diisi" });
+      }
+
+      // Konversi string tanggal dari frontend ke format Date (Mulai 00:00:00 sampai 23:59:59)
+      const start = new Date(`${startDate}T00:00:00.000Z`);
+      const end = new Date(`${endDate}T23:59:59.999Z`);
+
+      // 1. Ambil data tiket yang RESOLVED sesuai rentang tanggal
+      const tickets = await prisma.ticket.findMany({
+        where: {
+          status: "RESOLVED",
+          createdAt: {
+            gte: start,
+            lte: end,
+          },
+        },
+        include: {
+          createdBy: { select: { email: true, name: true } },
+          assignedTo: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      // 2. Inisialisasi Workbook dan Worksheet ExcelJS
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Laporan Tiket");
+
+      // 3. Definisikan Kolom
+      worksheet.columns = [
+        { header: "No Tiket", key: "ticketNumber", width: 15 },
+        { header: "Judul", key: "title", width: 30 },
+        { header: "Kategori", key: "category", width: 20 },
+        { header: "Sub Kategori", key: "subCategory", width: 25 },
+        { header: "Hostname / IP", key: "hostname", width: 20 },
+        { header: "No Telepon", key: "phoneDir", width: 18 },
+        { header: "Creator", key: "creator", width: 25 },
+        { header: "Assigned To", key: "engineer", width: 20 },
+        { header: "SLA Terpenuhi", key: "isSlaBreached", width: 25 },
+        { header: "Waktu Dibuat", key: "createdAt", width: 25 },
+        { header: "Waktu Diselesaikan", key: "resolvedAt", width: 25 },
+        { header: "Catatan Akhir", key: "notes", width: 40 },
+      ];
+
+      // Styling agar Header tebal (Bold)
+      worksheet.getRow(1).font = { bold: true };
+
+      // 4. Masukkan data ke baris Excel
+      tickets.forEach((ticket) => {
+        worksheet.addRow({
+          ticketNumber: ticket.ticketNumber,
+          title: ticket.title,
+          category: ticket.category || "-",
+          subCategory: ticket.subCategory || "-",
+          hostname: ticket.hostname || "-",
+          phoneDir: ticket.phoneDir || "-",
+          creator: ticket.createdBy?.email || "-",
+          engineer: ticket.assignedTo?.name || "-",
+          isSlaBreached: ticket.isSlaBreached
+            ? "X TIDAK (Melebihi Waktu)"
+            : "V YA (Tepat Waktu)",
+          createdAt: ticket.createdAt
+            ? ticket.createdAt.toLocaleString("id-ID")
+            : "-",
+          resolvedAt: ticket.resolvedAt
+            ? ticket.resolvedAt.toLocaleString("id-ID")
+            : "-",
+          notes: ticket.notes || "-",
+        });
+      });
+
+      // 5. Set Headers agar file otomatis terunduh di browser
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=Laporan_Tiket_${startDate}_sd_${endDate}.xlsx`,
+      );
+
+      // 6. Generate dan Kirim File
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      console.error("❌ ERROR EXPORT EXCEL:", error);
+      res
+        .status(500)
+        .json({ message: "Error exporting tickets", error: error.message });
     }
   },
 );

@@ -16,6 +16,7 @@ const UserDashboard = () => {
   const [category, setCategory] = useState("");
   const [subCategory, setSubCategory] = useState("");
   const [description, setDescription] = useState("");
+  const [phoneDir, setPhoneDir] = useState("");
   const [attachment, setAttachment] = useState(null);
 
   const fetchTickets = async () => {
@@ -43,6 +44,7 @@ const UserDashboard = () => {
     formData.append("category", category);
     formData.append("subCategory", subCategory);
     formData.append("description", description);
+    formData.append("phoneDir", phoneDir);
     if (attachment) formData.append("attachment", attachment);
 
     try {
@@ -58,6 +60,7 @@ const UserDashboard = () => {
         setCategory("");
         setSubCategory("");
         setDescription("");
+        setPhoneDir("");
         setAttachment(null);
 
         fetchTickets();
@@ -215,7 +218,19 @@ const UserDashboard = () => {
                     required
                   />
                 </div>
-
+                {/* --- TAMBAHKAN INPUT PHONE DIR DI SINI --- */}
+                <div className="form-group">
+                  <label className="form-label">Phone Dir / No. Telepon</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={phoneDir}
+                    onChange={(e) => setPhoneDir(e.target.value)}
+                    placeholder="Contoh: Ext 123 atau 0812345..."
+                    required
+                  />
+                </div>
+                {/* ----------------------------------------- */}
                 <div className="form-group">
                   <label className="form-label">Category</label>
                   <select
