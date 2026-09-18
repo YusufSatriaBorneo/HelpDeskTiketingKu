@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import SLATimer from "../components/SLATimer";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 // IMPORT RECHARTS UNTUK GRAFIK
 import {
   BarChart,
@@ -19,7 +21,8 @@ const HelpDeskDashboard = () => {
   const [tickets, setTickets] = useState([]);
   const [engineers, setEngineers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterDate, setFilterDate] = useState("");
+  const [dateRange, setDateRange] = useState([null, null]);
+  const [startDate, endDate] = dateRange;
   const [showLogs, setShowLogs] = useState({});
 
   // STATE: Mengontrol tab aktif di sidebar (Default sekarang adalah 'home')
@@ -138,20 +141,35 @@ const HelpDeskDashboard = () => {
         ? historyTickets
         : [];
 
-  // Filter tiket berdasarkan Tab Aktif, Nomor Tiket/Judul, dan Tanggal
+  // Filter tiket berdasarkan Tab Aktif, Nomor Tiket/Judul, dan Rentang Tanggal
   const filteredTickets = currentTabTickets.filter((ticket) => {
-    // 1. Pencarian berdasarkan Nomor Tiket atau Judul (menggunakan searchQuery)
-    const searchLower = searchQuery.toLowerCase().trim();
+    // 1. Pencarian Teks
+    const searchLower = (searchQuery || "").toLowerCase().trim();
     const matchesSearch = searchLower
       ? (ticket.ticketNo &&
-          ticket.ticketNo.toLowerCase().includes(searchLower)) ||
-        (ticket.title && ticket.title.toLowerCase().includes(searchLower))
+          String(ticket.ticketNo).toLowerCase().includes(searchLower)) ||
+        (ticket.title &&
+          String(ticket.title).toLowerCase().includes(searchLower))
       : true;
 
-    // 2. Pencarian berdasarkan Tanggal (Format YYYY-MM-DD)
-    const matchesDate = filterDate
-      ? ticket.createdAt && ticket.createdAt.startsWith(filterDate)
-      : true;
+    // 2. Pencarian Rentang Tanggal (Start Date s/d End Date)
+    let matchesDate = true;
+    if (ticket.createdAt && (startDate || endDate)) {
+      const tDate = new Date(ticket.createdAt);
+      tDate.setHours(0, 0, 0, 0); // Reset jam agar akurat membandingkan hari
+
+      if (startDate) {
+        const sDate = new Date(startDate);
+        sDate.setHours(0, 0, 0, 0);
+        if (tDate < sDate) matchesDate = false; // Jika tiket dibuat sebelum Start Date
+      }
+
+      if (endDate) {
+        const eDate = new Date(endDate);
+        eDate.setHours(0, 0, 0, 0);
+        if (tDate > eDate) matchesDate = false; // Jika tiket dibuat setelah End Date
+      }
+    }
 
     return matchesSearch && matchesDate;
   });
@@ -292,12 +310,15 @@ const HelpDeskDashboard = () => {
     const csvString = headers.concat(csvData).join("\n");
     const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
+    let dateLabel = "All";
+    if (startDate && endDate) dateLabel = `${startDate}_to_${endDate}`;
+    else if (startDate) dateLabel = `From_${startDate}`;
+    else if (endDate) dateLabel = `Until_${endDate}`;
 
     // 4. Trigger download
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `History_Tickets_${filterDate || "All"}.csv`);
-    document.body.appendChild(link);
+    link.setAttribute("download", `History_Tickets_${dateLabel}.csv`);
     link.click();
     document.body.removeChild(link);
   };
@@ -705,15 +726,32 @@ const HelpDeskDashboard = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ flex: 1, minWidth: "250px", padding: "0.75rem" }}
               />
-
-              {/* Input Pencarian Tanggal */}
-              <input
-                type="date"
-                className="form-control"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-                style={{ width: "200px", padding: "0.75rem" }}
-              />
+              {/* Input Rentang Tanggal (Single Calendar) */}
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.9rem",
+                    fontWeight: "bold",
+                    color: "#4b5563",
+                  }}
+                >
+                  Filter Tanggal:
+                </span>
+                <DatePicker
+                  selectsRange={true}
+                  startDate={startDate}
+                  endDate={endDate}
+                  onChange={(update) => {
+                    setDateRange(update);
+                  }}
+                  isClearable={true}
+                  placeholderText="Pilih rentang tanggal..."
+                  className="form-control"
+                  dateFormat="dd/MM/yyyy"
+                />
+              </div>
 
               {/* Tombol Export (Hanya muncul di tab History) */}
               {activeTab === "history" && (
