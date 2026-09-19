@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const EngineerDashboard = () => {
   const { token } = useAuth(); // logout tidak lagi dipanggil di sini
@@ -9,6 +11,8 @@ const EngineerDashboard = () => {
   const [activeTab, setActiveTab] = useState("home");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dateRange, setDateRange] = useState([null, null]);
+  const [startDate, endDate] = dateRange;
 
   // State untuk mengontrol toggle log history per tiket
   const [showLogs, setShowLogs] = useState({});
@@ -173,12 +177,35 @@ const EngineerDashboard = () => {
         : [];
 
   const filteredTickets = currentTabTickets.filter((ticket) => {
-    const searchLower = searchQuery.toLowerCase();
-    const ticketNo = ticket.ticketNumber
-      ? ticket.ticketNumber.toLowerCase()
-      : "";
-    const titleLower = ticket.title ? ticket.title.toLowerCase() : "";
-    return ticketNo.includes(searchLower) || titleLower.includes(searchLower);
+    // 1. Pencarian Teks (Nomor Tiket atau Judul)
+    const searchLower = (searchQuery || "").toLowerCase().trim();
+    const matchesSearch = searchLower
+      ? (ticket.ticketNo &&
+          String(ticket.ticketNo).toLowerCase().includes(searchLower)) ||
+        (ticket.title &&
+          String(ticket.title).toLowerCase().includes(searchLower))
+      : true;
+
+    // 2. Pencarian Rentang Tanggal (Berdasarkan Start Date & End Date)
+    let matchesDate = true;
+    if (ticket.createdAt && (startDate || endDate)) {
+      const tDate = new Date(ticket.createdAt);
+      tDate.setHours(0, 0, 0, 0);
+
+      if (startDate) {
+        const sDate = new Date(startDate);
+        sDate.setHours(0, 0, 0, 0);
+        if (tDate < sDate) matchesDate = false;
+      }
+
+      if (endDate) {
+        const eDate = new Date(endDate);
+        eDate.setHours(0, 0, 0, 0);
+        if (tDate > eDate) matchesDate = false;
+      }
+    }
+
+    return matchesSearch && matchesDate;
   });
 
   const getMenuItemStyle = (isActive) => ({
@@ -207,6 +234,39 @@ const EngineerDashboard = () => {
     fontWeight: "700",
   });
 
+  const handleExportData = () => {
+    if (filteredTickets.length === 0) {
+      alert("Tidak ada data untuk di-export.");
+      return;
+    }
+
+    const headers = [
+      "Ticket No,Title,Status,Priority,Category,Hostname,Created At,Engineer",
+    ];
+
+    const csvData = filteredTickets.map((t) => {
+      return `"${t.ticketNo || ""}", "${t.title || ""}", "${t.status}", "${t.priority || ""}", "${t.category || ""}", "${t.hostname || ""}", "${new Date(t.createdAt).toLocaleDateString()}", "${t.assignedTo?.name || "-"}"`;
+    });
+
+    const csvString = headers.concat(csvData).join("\n");
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    let dateLabel = "All";
+    if (startDate && endDate)
+      dateLabel = `${new Date(startDate).toLocaleDateString("id-ID").replace(/\//g, "-")}_to_${new Date(endDate).toLocaleDateString("id-ID").replace(/\//g, "-")}`;
+    else if (startDate)
+      dateLabel = `From_${new Date(startDate).toLocaleDateString("id-ID").replace(/\//g, "-")}`;
+    else if (endDate)
+      dateLabel = `Until_${new Date(endDate).toLocaleDateString("id-ID").replace(/\//g, "-")}`;
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `My_History_Tickets_${dateLabel}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   return (
     <div
       style={{ display: "flex", alignItems: "flex-start", minHeight: "100vh" }}
@@ -431,19 +491,77 @@ const EngineerDashboard = () => {
 
             {activeTab !== "home" && (
               <>
-                <div style={{ marginBottom: "2rem" }}>
+                {/* ================= TAMPILAN PENCARIAN & FILTER ================= */}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "1rem",
+                    marginBottom: "2rem",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  {/* Input Pencarian Teks (Pertahankan kode input yang lama jika sudah ada, atau timpa dengan ini) */}
                   <input
                     type="text"
                     className="form-control"
                     placeholder="🔍 Cari Nomor Tiket atau Judul..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{
-                      width: "100%",
-                      maxWidth: "400px",
-                      padding: "0.75rem",
-                    }}
+                    style={{ flex: 1, minWidth: "250px", padding: "0.75rem" }}
                   />
+
+                  {/* Input Rentang Tanggal (Single Calendar) */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.9rem",
+                        fontWeight: "bold",
+                        color: "#4b5563",
+                      }}
+                    >
+                      Filter Tanggal:
+                    </span>
+                    <DatePicker
+                      selectsRange={true}
+                      startDate={startDate}
+                      endDate={endDate}
+                      onChange={(update) => {
+                        setDateRange(update);
+                      }}
+                      isClearable={true}
+                      placeholderText="Pilih rentang tanggal..."
+                      className="form-control"
+                      dateFormat="dd/MM/yyyy"
+                    />
+                  </div>
+
+                  {/* Tombol Export (Hanya muncul jika di tab history) */}
+                  {activeTab === "history" && (
+                    <button
+                      onClick={handleExportData}
+                      style={{
+                        padding: "0.75rem 1.5rem",
+                        backgroundColor: "#10b981",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      📥 Export Data
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid-2">
