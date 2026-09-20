@@ -8,6 +8,11 @@ import "react-datepicker/dist/react-datepicker.css";
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -322,6 +327,149 @@ const HelpDeskDashboard = () => {
     link.click();
     document.body.removeChild(link);
   };
+
+  // STATE: Filter Bulan untuk Dashboard Home (Default: Bulan Ini)
+  const [dashboardMonth, setDashboardMonth] = useState(new Date());
+
+  // HELPER: Cek apakah tanggal berada di bulan & tahun yang sama dengan filter
+  const isSameMonth = (dateString, targetDate) => {
+    if (!dateString) return false;
+    const d = new Date(dateString);
+    return (
+      d.getMonth() === targetDate.getMonth() &&
+      d.getFullYear() === targetDate.getFullYear()
+    );
+  };
+
+  // ================= DATA PROCESSING DASHBOARD =================
+
+  // 1. KPI (Kinerja Utama) berdasar bulan terpilih
+  const monthlyTicketsCreated = tickets.filter((t) =>
+    isSameMonth(t.createdAt, dashboardMonth),
+  );
+  const monthlyTicketsResolved = tickets.filter(
+    (t) =>
+      t.status === "RESOLVED" &&
+      isSameMonth(t.updatedAt || t.createdAt, dashboardMonth),
+  );
+
+  const kpiOpen = monthlyTicketsCreated.filter(
+    (t) => t.status === "OPEN" || t.status === "ASSIGNED",
+  ).length;
+  const kpiHold = monthlyTicketsCreated.filter(
+    (t) => t.status === "HOLD" || t.status === "PENDING",
+  ).length;
+  const kpiCompleted = monthlyTicketsResolved.length;
+
+  // ================= TAMBAHAN LOGIKA SLA =================
+  // ASUMSI: Data tiket dari API memiliki field boolean `isSlaBreached` (true jika batas waktu terlewat).
+  // Jika API Anda menggunakan string (misal: t.slaStatus === 'Missed'), sesuaikan kondisinya.
+
+  const slaMissed = monthlyTicketsResolved.filter(
+    (t) => t.isSlaBreached,
+  ).length;
+  const slaMet = kpiCompleted - slaMissed;
+
+  // Hitung persentase SLA yang terpenuhi, pastikan tidak membagi dengan 0
+  const slaRatio =
+    kpiCompleted > 0 ? ((slaMet / kpiCompleted) * 100).toFixed(1) : 0;
+
+  // 2. TREN TIKET MASUK VS SELESAI (Line Chart)
+  const getTrendData = () => {
+    const daysInMonth = new Date(
+      dashboardMonth.getFullYear(),
+      dashboardMonth.getMonth() + 1,
+      0,
+    ).getDate();
+    const trend = Array.from({ length: daysInMonth }, (_, i) => ({
+      tanggal: i + 1,
+      Masuk: 0,
+      Selesai: 0,
+    }));
+
+    tickets.forEach((t) => {
+      // Hitung tiket masuk
+      if (t.createdAt && isSameMonth(t.createdAt, dashboardMonth)) {
+        const day = new Date(t.createdAt).getDate();
+        trend[day - 1].Masuk += 1;
+      }
+      // Hitung tiket selesai
+      if (
+        t.status === "RESOLVED" &&
+        t.updatedAt &&
+        isSameMonth(t.updatedAt, dashboardMonth)
+      ) {
+        const day = new Date(t.updatedAt).getDate();
+        trend[day - 1].Selesai += 1;
+      }
+    });
+    return trend;
+  };
+
+  // 3. DISTRIBUSI STATUS TIKET (Donut Chart)
+  const getStatusData = () => {
+    const counts = {};
+    monthlyTicketsCreated.forEach((t) => {
+      counts[t.status] = (counts[t.status] || 0) + 1;
+    });
+    return Object.keys(counts).map((key) => ({
+      name: key,
+      value: counts[key],
+    }));
+  };
+
+  const STATUS_COLORS = {
+    OPEN: "#3b82f6",
+    ASSIGNED: "#8b5cf6",
+    IN_PROGRESS: "#0d6efd",
+    HOLD: "#f59e0b",
+    PENDING: "#f97316",
+    RESOLVED: "#14b8a6",
+  };
+
+  // 4. ENGINEER LEADERBOARD (Tabel)
+  const getMonthlyLeaderboard = () => {
+    const stats = {};
+
+    monthlyTicketsResolved.forEach((t) => {
+      if (t.assignedTo) {
+        const engName = t.assignedTo.name;
+
+        // Buat objek awal jika engineer belum ada di daftar
+        if (!stats[engName]) {
+          stats[engName] = { name: engName, count: 0, slaMissed: 0 };
+        }
+
+        // Tambah total tiket selesai
+        stats[engName].count += 1;
+
+        // Tambah jumlah SLA terlewat jika isSlaBreached bernilai true
+        if (t.isSlaBreached) {
+          stats[engName].slaMissed += 1;
+        }
+      }
+    });
+
+    // Format hasil, hitung kalkulasi SLA, dan urutkan
+    return Object.values(stats)
+      .map((eng) => {
+        const slaMet = eng.count - eng.slaMissed;
+        const slaRatio =
+          eng.count > 0 ? ((slaMet / eng.count) * 100).toFixed(1) : 0;
+
+        return {
+          ...eng,
+          slaMet,
+          slaRatio,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+  };
+
+  const trendData = getTrendData();
+  const statusData = getStatusData();
+  const monthlyLeaderboard = getMonthlyLeaderboard();
+
   return (
     <div
       style={{ display: "flex", alignItems: "flex-start", minHeight: "100vh" }}
@@ -431,9 +579,36 @@ const HelpDeskDashboard = () => {
         </div>
 
         {/* ================= TAMPILAN TAB HOME ================= */}
+        {/* ================= TAMPILAN TAB HOME ================= */}
         {activeTab === "home" && (
           <div>
-            {/* CARDS OVERVIEW */}
+            {/* FILTER BULAN */}
+            <div
+              style={{
+                marginBottom: "1.5rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+              }}
+            >
+              <strong style={{ color: "var(--text-secondary)" }}>
+                📅 Filter Analitik:
+              </strong>
+              <DatePicker
+                selected={dashboardMonth}
+                onChange={(date) => setDashboardMonth(date)}
+                dateFormat="MMMM yyyy"
+                showMonthYearPicker
+                className="form-control"
+                style={{
+                  padding: "0.5rem",
+                  borderRadius: "5px",
+                  border: "1px solid #ccc",
+                }}
+              />
+            </div>
+
+            {/* CARDS OVERVIEW (KPI) */}
             <div
               style={{
                 display: "grid",
@@ -457,7 +632,7 @@ const HelpDeskDashboard = () => {
                     color: "var(--text-secondary)",
                   }}
                 >
-                  Open / Assigned
+                  Masuk / Open (Bulan Ini)
                 </h3>
                 <p
                   style={{
@@ -467,7 +642,7 @@ const HelpDeskDashboard = () => {
                     color: "#3b82f6",
                   }}
                 >
-                  {openCount}
+                  {kpiOpen}
                 </p>
               </div>
               <div
@@ -495,7 +670,7 @@ const HelpDeskDashboard = () => {
                     color: "#f59e0b",
                   }}
                 >
-                  {holdCount}
+                  {kpiHold}
                 </p>
               </div>
               <div
@@ -513,7 +688,7 @@ const HelpDeskDashboard = () => {
                     color: "var(--text-secondary)",
                   }}
                 >
-                  Completed
+                  Selesai (Resolved)
                 </h3>
                 <p
                   style={{
@@ -523,184 +698,341 @@ const HelpDeskDashboard = () => {
                     color: "#14b8a6",
                   }}
                 >
-                  {completedCount}
+                  {kpiCompleted}
                 </p>
               </div>
             </div>
-
-            {/* LEADERBOARD & CHART SECTION */}
+            {/* CARDS OVERVIEW (KPI) */}
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
                 gap: "1.5rem",
+                marginBottom: "1.5rem", // Diubah sedikit menjadi 1.5rem agar jarak ke kartu SLA pas
               }}
             >
-              {/* Leaderboard Card */}
-              <div className="card" style={{ padding: "1.5rem" }}>
+              {/* ... (Kode Card Masuk, Hold, Selesai yang sudah ada dibiarkan di sini) ... */}
+            </div>
+
+            {/* ================= TAMBAHAN KARTU SLA ================= */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                gap: "1.5rem",
+                marginBottom: "2rem",
+              }}
+            >
+              {/* Card SLA Terpenuhi */}
+              <div
+                className="card"
+                style={{
+                  textAlign: "center",
+                  padding: "1.5rem",
+                  borderTop: "4px solid #10b981", // Hijau
+                }}
+              >
                 <h3
                   style={{
-                    margin: "0 0 1rem 0",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
+                    margin: 0,
+                    fontSize: "1.1rem",
+                    color: "var(--text-secondary)",
                   }}
                 >
-                  🏆 Top Engineers Hari Ini
+                  ✅ SLA Terpenuhi
                 </h3>
                 <p
                   style={{
-                    fontSize: "0.85rem",
-                    color: "var(--text-secondary)",
-                    marginBottom: "1.5rem",
+                    fontSize: "2.5rem",
+                    fontWeight: "bold",
+                    margin: "0.5rem 0 0 0",
+                    color: "#10b981",
                   }}
                 >
-                  Berdasarkan tiket yang diselesaikan (Resolved) hari ini. Akan
-                  otomatis ter-reset besok.
+                  {slaMet}
                 </p>
+              </div>
 
-                {leaderboardData.length > 0 ? (
-                  <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                    {leaderboardData.map((eng, index) => (
-                      <li
+              {/* Card SLA Missed */}
+              <div
+                className="card"
+                style={{
+                  textAlign: "center",
+                  padding: "1.5rem",
+                  borderTop: "4px solid #ef4444", // Merah
+                }}
+              >
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: "1.1rem",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  ❌ SLA Missed
+                </h3>
+                <p
+                  style={{
+                    fontSize: "2.5rem",
+                    fontWeight: "bold",
+                    margin: "0.5rem 0 0 0",
+                    color: "#ef4444",
+                  }}
+                >
+                  {slaMissed}
+                </p>
+              </div>
+
+              {/* Card Rasio SLA */}
+              <div
+                className="card"
+                style={{
+                  textAlign: "center",
+                  padding: "1.5rem",
+                  borderTop: "4px solid #8b5cf6", // Ungu
+                }}
+              >
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: "1.1rem",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  📊 Rasio SLA Selesai
+                </h3>
+                <p
+                  style={{
+                    fontSize: "2.5rem",
+                    fontWeight: "bold",
+                    margin: "0.5rem 0 0 0",
+                    color: "#8b5cf6",
+                  }}
+                >
+                  {slaRatio}%
+                </p>
+              </div>
+            </div>
+            {/* ======================================================= */}
+            {/* BARIS KEDUA: GRAFIK TREN & DISTRIBUSI */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr",
+                gap: "1.5rem",
+                marginBottom: "2rem",
+              }}
+            >
+              {/* Tren Tiket Line Chart */}
+              <div className="card" style={{ padding: "1.5rem" }}>
+                <h3 style={{ margin: "0 0 1rem 0" }}>
+                  📈 Tren Tiket: Masuk vs Selesai
+                </h3>
+                <div style={{ width: "100%", height: "300px" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={trendData}
+                      margin={{ top: 5, right: 20, left: -20, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis dataKey="tanggal" tick={{ fontSize: 12 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Legend verticalAlign="top" height={36} />
+                      <Line
+                        type="monotone"
+                        dataKey="Masuk"
+                        stroke="#3b82f6"
+                        strokeWidth={3}
+                        dot={{ r: 3 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="Selesai"
+                        stroke="#14b8a6"
+                        strokeWidth={3}
+                        dot={{ r: 3 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Distribusi Donut Chart */}
+              <div className="card" style={{ padding: "1.5rem" }}>
+                <h3 style={{ margin: "0 0 1rem 0" }}>🍩 Distribusi Status</h3>
+                <div style={{ width: "100%", height: "300px" }}>
+                  {statusData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={statusData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={90}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {statusData.map((entry, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={STATUS_COLORS[entry.name] || "#8884d8"}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div
+                      style={{
+                        textAlign: "center",
+                        paddingTop: "5rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      Tidak ada data tiket bulan ini.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* BARIS KETIGA: TABEL LEADERBOARD ENGINEER */}
+            <div className="card" style={{ padding: "1.5rem" }}>
+              <h3 style={{ margin: "0 0 1rem 0" }}>
+                🥇 Performa Engineer (Leaderboard)
+              </h3>
+              <p
+                style={{
+                  fontSize: "0.85rem",
+                  color: "var(--text-secondary)",
+                  marginBottom: "1rem",
+                }}
+              >
+                Jumlah tiket yang diselesaikan berdasarkan bulan terpilih.
+              </p>
+
+              {monthlyLeaderboard.length > 0 ? (
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    textAlign: "left",
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        backgroundColor: "var(--bg-secondary)",
+                        textAlign: "left",
+                      }}
+                    >
+                      <th style={{ padding: "0.75rem" }}>Peringkat</th>
+                      <th style={{ padding: "0.75rem" }}>Nama Engineer</th>
+                      <th style={{ padding: "0.75rem" }}>Tiket Selesai</th>
+                      {/* ================= TAMBAHAN HEADER ================= */}
+                      <th style={{ padding: "0.75rem", textAlign: "center" }}>
+                        SLA Terpenuhi
+                      </th>
+                      <th style={{ padding: "0.75rem", textAlign: "center" }}>
+                        SLA Missed
+                      </th>
+                      <th style={{ padding: "0.75rem", textAlign: "center" }}>
+                        Rasio SLA
+                      </th>
+                      {/* =================================================== */}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyLeaderboard.map((eng, index) => (
+                      <tr
                         key={index}
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "10px 15px",
-                          marginBottom: "8px",
+                          borderBottom: "1px solid #eee",
                           backgroundColor:
                             index === 0
-                              ? "rgba(255, 215, 0, 0.15)"
-                              : "rgba(128,128,128,0.05)",
-                          borderRadius: "8px",
-                          borderLeft:
-                            index === 0
-                              ? "4px solid #ffd700"
-                              : "4px solid transparent",
+                              ? "rgba(255, 215, 0, 0.05)"
+                              : "transparent",
                         }}
                       >
-                        <div
+                        <td style={{ padding: "12px", fontWeight: "bold" }}>
+                          {index === 0
+                            ? "🥇 1"
+                            : index === 1
+                              ? "🥈 2"
+                              : index === 2
+                                ? "🥉 3"
+                                : index + 1}
+                        </td>
+                        <td
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
+                            padding: "12px",
                             fontWeight: index === 0 ? "bold" : "normal",
                           }}
                         >
-                          <span>
-                            {index === 0
-                              ? "🥇"
-                              : index === 1
-                                ? "🥈"
-                                : index === 2
-                                  ? "🥉"
-                                  : `${index + 1}.`}
-                          </span>
-                          <span>{eng.name}</span>
-                        </div>
-                        <span
+                          {eng.name}
+                        </td>
+                        <td
                           style={{
+                            padding: "12px",
+                            color: "#14b8a6",
                             fontWeight: "bold",
-                            color: "var(--text-primary)",
                           }}
                         >
                           {eng.count} Tiket
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      padding: "2rem 0",
-                      color: "var(--text-secondary)",
-                      fontStyle: "italic",
-                    }}
-                  >
-                    Belum ada tiket yang diselesaikan hari ini. 🚀
-                  </div>
-                )}
-              </div>
+                        </td>
 
-              {/* Bar Chart Card */}
-              <div className="card" style={{ padding: "1.5rem" }}>
-                <h3
-                  style={{
-                    margin: "0 0 1rem 0",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
-                >
-                  📊 Beban Kerja Engineer
-                </h3>
-                <p
-                  style={{
-                    fontSize: "0.85rem",
-                    color: "var(--text-secondary)",
-                    marginBottom: "1.5rem",
-                  }}
-                >
-                  Total tiket yang belum selesai (Open/Assigned/Hold) di
-                  masing-masing engineer.
-                </p>
-
-                {chartData.length > 0 ? (
-                  <div style={{ width: "100%", height: "280px" }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={chartData}
-                        margin={{ top: 5, right: 20, left: -20, bottom: 5 }}
-                      >
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="#444"
-                          vertical={false}
-                        />
-                        <XAxis
-                          dataKey="name"
-                          tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
-                        />
-                        <YAxis
-                          allowDecimals={false}
-                          tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
-                        />
-                        <Tooltip
-                          cursor={{ fill: "rgba(255,255,255,0.1)" }}
-                          contentStyle={{
-                            backgroundColor: "#222",
-                            borderColor: "#444",
-                            borderRadius: "8px",
-                            color: "#fff",
+                        {/* ================= DATA SLA (SUDAH DIPERBAIKI) ================= */}
+                        <td
+                          style={{
+                            padding: "12px",
+                            textAlign: "center",
+                            color: "#10b981",
+                            fontWeight: "bold",
                           }}
-                        />
-                        <Legend />
-                        <Bar
-                          dataKey="total"
-                          name="Total Tiket Aktif"
-                          fill="#3b82f6"
-                          radius={[4, 4, 0, 0]}
-                          barSize={40}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      padding: "2rem 0",
-                      color: "var(--text-secondary)",
-                      fontStyle: "italic",
-                    }}
-                  >
-                    Semua tiket sudah diselesaikan! 🎉
-                  </div>
-                )}
-              </div>
+                        >
+                          {eng.slaMet}
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px",
+                            textAlign: "center",
+                            color: "#ef4444",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {eng.slaMissed}
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px",
+                            textAlign: "center",
+                            color: "#8b5cf6",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {eng.slaRatio}%
+                        </td>
+                        {/* =============================================================== */}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "2rem 0",
+                    color: "var(--text-secondary)",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Belum ada tiket yang diselesaikan bulan ini.
+                </div>
+              )}
             </div>
           </div>
         )}
