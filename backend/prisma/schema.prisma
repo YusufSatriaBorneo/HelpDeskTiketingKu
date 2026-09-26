@@ -91,3 +91,12 @@ model TicketHistory {
   
   createdAt   DateTime @default(now()) // Otomatis mencatat Date dan Time
 }
+
+model KnowledgeBase {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  fileUrl     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

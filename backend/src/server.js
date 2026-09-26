@@ -4,6 +4,7 @@ const cors = require("cors");
 
 const authRoutes = require("./routes/authRoutes");
 const ticketRoutes = require("./routes/ticketRoutes");
+const knowledgeRoutes = require("./routes/knowledgeRoutes");
 const path = require("path"); // 1. PASTIKAN INI ADA DI ATAS
 
 const app = express();
@@ -17,8 +18,12 @@ app.use(express.json());
 app.use(
   "/uploads",
   express.static(path.join(__dirname, "../uploads"), {
-    setHeaders: function (res, path, stat) {
-      res.set("Content-Disposition", "attachment");
+    setHeaders: function (res, filePath, stat) {
+      if (filePath.match(/\.(pdf|jpg|jpeg|png|gif)$/i)) {
+        res.set("Content-Disposition", "inline");
+      } else {
+        res.set("Content-Disposition", "attachment");
+      }
     },
   }),
 );
@@ -26,6 +31,7 @@ app.use(
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/tickets", ticketRoutes);
+app.use("/api/knowledge", knowledgeRoutes);
 const userRoutes = require("./routes/userRoutes");
 
 // Basic health check

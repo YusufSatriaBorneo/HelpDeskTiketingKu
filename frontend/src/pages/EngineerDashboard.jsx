@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import KnowledgeBase from "../components/KnowledgeBase";
 
 const EngineerDashboard = () => {
   const { token } = useAuth(); // logout tidak lagi dipanggil di sini
@@ -344,6 +345,18 @@ const EngineerDashboard = () => {
                 {historyTickets.length}
               </span>
             </button>
+
+            <button
+              style={getMenuItemStyle(activeTab === "knowledge-base")}
+              onClick={() => setActiveTab("knowledge-base")}
+            >
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "12px" }}
+              >
+                <span>📚</span>
+                <span>Knowledge Base</span>
+              </div>
+            </button>
           </div>
         </div>
         {/* Tombol Logout Dihapus Sesuai Permintaan */}
@@ -366,7 +379,9 @@ const EngineerDashboard = () => {
                 ? "Ringkasan total tiket yang menjadi tanggung jawab Anda."
                 : activeTab === "it-action"
                   ? "Tickets assigned to you for resolution."
-                  : "Riwayat tiket yang telah Anda selesaikan."}
+                  : activeTab === "history"
+                    ? "Riwayat tiket yang telah Anda selesaikan."
+                    : "Pusat informasi dan dokumen panduan."}
             </p>
           </div>
           {/* Tombol Refresh Dihapus Sesuai Permintaan */}
@@ -489,7 +504,9 @@ const EngineerDashboard = () => {
               </div>
             )}
 
-            {activeTab !== "home" && (
+            {activeTab === "knowledge-base" && <KnowledgeBase />}
+
+            {(activeTab === "it-action" || activeTab === "history") && (
               <>
                 {/* ================= TAMPILAN PENCARIAN & FILTER ================= */}
                 <div
