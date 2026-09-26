@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import SLATimer from "../components/SLATimer";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import KnowledgeBase from "../components/KnowledgeBase";
 // IMPORT RECHARTS UNTUK GRAFIK
 import {
   BarChart,
@@ -538,6 +539,15 @@ const HelpDeskDashboard = () => {
               {historyTickets.length}
             </span>
           </button>
+          <button
+            style={getMenuItemStyle(activeTab === "knowledge-base")}
+            onClick={() => setActiveTab("knowledge-base")}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <span>📚</span>
+              <span>Knowledge Base</span>
+            </div>
+          </button>
           {user?.role === "HELPDESK" && (
             <NavLink
               to="/users"
@@ -574,7 +584,9 @@ const HelpDeskDashboard = () => {
               ? "Ringkasan keseluruhan status tiket di Helpdesk saat ini."
               : activeTab === "it-action"
                 ? "Overview tiket masuk yang memerlukan delegasi atau penanganan awal."
-                : "Riwayat tiket yang sudah di-assign ke engineer atau sudah diselesaikan (Resolved)."}
+                : activeTab === "knowledge-base"
+                  ? "Pusat informasi dan dokumen panduan."
+                  : "Riwayat tiket yang sudah di-assign ke engineer atau sudah diselesaikan (Resolved)."}
           </p>
         </div>
 
@@ -1037,8 +1049,11 @@ const HelpDeskDashboard = () => {
           </div>
         )}
 
+        {/* ================= TAMPILAN TAB KNOWLEDGE BASE ================= */}
+        {activeTab === "knowledge-base" && <KnowledgeBase />}
+
         {/* ================= TAMPILAN TAB IT-ACTION & HISTORY ================= */}
-        {activeTab !== "home" && (
+        {(activeTab === "it-action" || activeTab === "history") && (
           <>
             <div
               style={{
