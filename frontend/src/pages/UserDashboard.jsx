@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import KnowledgeBaseUser from "../components/KnowledgeBaseUser";
 
 const UserDashboard = () => {
   const { token } = useAuth();
@@ -167,6 +168,16 @@ const UserDashboard = () => {
             <span style={getBadgeStyle(activeTab === "history")}>
               {tickets.length}
             </span>
+          </button>
+
+          <button
+            style={getMenuItemStyle(activeTab === "knowledge-base")}
+            onClick={() => setActiveTab("knowledge-base")}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <span>📚</span>
+              <span>Knowledge Base</span>
+            </div>
           </button>
         </div>
       </aside>
@@ -391,7 +402,7 @@ const UserDashboard = () => {
                             : ticket.status === "OPEN"
                               ? "white"
                               : ticket.status === "HOLD" ||
-                                  ticket.status === "PENDING"
+                                ticket.status === "PENDING"
                                 ? "#fff"
                                 : "white",
                         backgroundColor:
@@ -400,7 +411,7 @@ const UserDashboard = () => {
                             : ticket.status === "OPEN"
                               ? "#3b82f6"
                               : ticket.status === "HOLD" ||
-                                  ticket.status === "PENDING"
+                                ticket.status === "PENDING"
                                 ? "#fcd34d"
                                 : "#6b7280",
                       }}
@@ -518,6 +529,19 @@ const UserDashboard = () => {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* TAMPILAN TAB KNOWLEDGE BASE */}
+        {activeTab === "knowledge-base" && (
+          <div>
+            <div style={{ marginBottom: "2rem" }}>
+              <h2 style={{ margin: "0 0 8px 0" }}>Knowledge Base</h2>
+              <p style={{ color: "var(--text-secondary)", margin: 0 }}>
+                Dokumen referensi dan panduan yang tersedia untuk Anda.
+              </p>
+            </div>
+            <KnowledgeBaseUser />
           </div>
         )}
       </main>

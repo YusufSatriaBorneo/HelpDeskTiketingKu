@@ -52,7 +52,7 @@ const uploadPdf = (req, res, next) => {
 router.use(authenticateToken);
 
 // GET all knowledge base items
-router.get("/", authorizeRole(["ENGINEER", "HELPDESK"]), async (req, res) => {
+router.get("/", authorizeRole(["ENGINEER", "HELPDESK", "USER"]), async (req, res) => {
   try {
     const data = await prisma.knowledgeBase.findMany({
       orderBy: { createdAt: "desc" },
