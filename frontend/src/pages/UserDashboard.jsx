@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import KnowledgeBaseUser from "../components/KnowledgeBaseUser";
+// 1. TAMBAHAN: Import komponen ChatbotAI
+import ChatbotAI from "../components/ChatbotAI";
 
 const UserDashboard = () => {
   const { token } = useAuth();
@@ -85,9 +87,7 @@ const UserDashboard = () => {
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
-    // PERUBAHAN: Padding kiri 28px agar sejajar logo, padding atas-bawah 12px
     padding: "12px 18px 12px 28px",
-    // PERUBAHAN: Border radius rata kiri (0), melengkung kanan (50px)
     borderRadius: "0 50px 50px 0",
     border: "none",
     cursor: "pointer",
@@ -109,28 +109,24 @@ const UserDashboard = () => {
   });
 
   return (
-    // PERUBAHAN: minHeight disetel ke 100vh
     <div
       style={{ display: "flex", alignItems: "flex-start", minHeight: "100vh" }}
     >
-      {/* SIDEBAR (Disamakan total dengan UI HelpDesk) */}
+      {/* SIDEBAR */}
       <aside
         style={{
-          width: "280px", // Disamakan lebarnya dengan HelpDeskDashboard
-          height: "100vh", // Full tinggi layar ke bawah
+          width: "280px",
+          height: "100vh",
           position: "sticky",
           top: 0,
-          // PERUBAHAN: Padding kiri 0 agar mepet ke ujung layar
           padding: "24px 16px 24px 0",
-          borderRight: "1px solid var(--border-color)", // Garis pemisah full ke bawah
+          borderRight: "1px solid var(--border-color)",
           display: "flex",
           flexDirection: "column",
           gap: "8px",
           overflowY: "auto",
         }}
       >
-        {/* Header Sidebar */}
-        {/* PERUBAHAN: Tambah padding kiri 28px agar teksnya sejajar logo HelpDesk TiketingKu */}
         <div style={{ padding: "0 10px 0 28px", marginBottom: "1.5rem" }}>
           <h3 style={{ margin: "0 0 4px 0", fontSize: "1.1rem" }}>Menu User</h3>
           <p
@@ -164,7 +160,6 @@ const UserDashboard = () => {
               <span>📜</span>
               <span>History</span>
             </div>
-            {/* Badge angka jumlah tiket */}
             <span style={getBadgeStyle(activeTab === "history")}>
               {tickets.length}
             </span>
@@ -179,12 +174,23 @@ const UserDashboard = () => {
               <span>Knowledge Base</span>
             </div>
           </button>
+
+          {/* 2. TAMBAHAN: Tombol Menu Tanya AI (di bawah Knowledge Base) */}
+          <button
+            style={getMenuItemStyle(activeTab === "tanya-ai")}
+            onClick={() => setActiveTab("tanya-ai")}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <span>🤖</span>
+              <span>Tanya AI</span>
+            </div>
+          </button>
         </div>
       </aside>
 
       {/* MAIN CONTENT */}
-      {/* PERUBAHAN: Padding disamakan dengan HelpDeskDashboard */}
       <main style={{ flex: 1, padding: "2rem 3rem" }}>
+
         {/* TAMPILAN TAB CREATE TICKET */}
         {activeTab === "create" && (
           <div>
@@ -229,7 +235,7 @@ const UserDashboard = () => {
                     required
                   />
                 </div>
-                {/* --- TAMBAHKAN INPUT PHONE DIR DI SINI --- */}
+
                 <div className="form-group">
                   <label className="form-label">Phone Dir / No. Telepon</label>
                   <input
@@ -241,7 +247,7 @@ const UserDashboard = () => {
                     required
                   />
                 </div>
-                {/* ----------------------------------------- */}
+
                 <div className="form-group">
                   <label className="form-label">Category</label>
                   <select
@@ -272,40 +278,20 @@ const UserDashboard = () => {
                     <option value="">Pilih Sub-Kategori</option>
                     {category === "Hardware" && (
                       <>
-                        <option value="Monitor Blank/Rusak">
-                          Monitor Blank/Rusak
-                        </option>
-                        <option value="Keyboard / Mouse Error">
-                          Keyboard / Mouse Error
-                        </option>
-                        <option value="Printer Tidak Bisa Print">
-                          Printer Tidak Bisa Print
-                        </option>
-                        <option value="PC / Laptop Mati Total">
-                          PC / Laptop Mati Total
-                        </option>
-                        <option value="Upgrade Hardware (RAM/SSD)">
-                          Upgrade Hardware (RAM/SSD)
-                        </option>
+                        <option value="Monitor Blank/Rusak">Monitor Blank/Rusak</option>
+                        <option value="Keyboard / Mouse Error">Keyboard / Mouse Error</option>
+                        <option value="Printer Tidak Bisa Print">Printer Tidak Bisa Print</option>
+                        <option value="PC / Laptop Mati Total">PC / Laptop Mati Total</option>
+                        <option value="Upgrade Hardware (RAM/SSD)">Upgrade Hardware (RAM/SSD)</option>
                       </>
                     )}
                     {category === "Software" && (
                       <>
-                        <option value="Install Ulang OS (Windows/Mac/Linux)">
-                          Install Ulang OS (Windows/Mac/Linux)
-                        </option>
-                        <option value="Install Microsoft Office">
-                          Install Microsoft Office
-                        </option>
-                        <option value="Install Antivirus">
-                          Install Antivirus
-                        </option>
-                        <option value="Install Aplikasi Desain/Video">
-                          Install Aplikasi Desain/Video
-                        </option>
-                        <option value="Install Software Lainnya">
-                          Install Software Lainnya
-                        </option>
+                        <option value="Install Ulang OS (Windows/Mac/Linux)">Install Ulang OS (Windows/Mac/Linux)</option>
+                        <option value="Install Microsoft Office">Install Microsoft Office</option>
+                        <option value="Install Antivirus">Install Antivirus</option>
+                        <option value="Install Aplikasi Desain/Video">Install Aplikasi Desain/Video</option>
+                        <option value="Install Software Lainnya">Install Software Lainnya</option>
                       </>
                     )}
                     {category === "Account" && (
@@ -396,22 +382,13 @@ const UserDashboard = () => {
                         fontWeight: "bold",
                         textTransform: "uppercase",
                         letterSpacing: "0.025em",
-                        color:
-                          ticket.status === "RESOLVED"
-                            ? "white"
-                            : ticket.status === "OPEN"
-                              ? "white"
-                              : ticket.status === "HOLD" ||
-                                ticket.status === "PENDING"
-                                ? "#fff"
-                                : "white",
+                        color: "white",
                         backgroundColor:
                           ticket.status === "RESOLVED"
                             ? "#14b8a6"
                             : ticket.status === "OPEN"
                               ? "#3b82f6"
-                              : ticket.status === "HOLD" ||
-                                ticket.status === "PENDING"
+                              : ticket.status === "HOLD" || ticket.status === "PENDING"
                                 ? "#fcd34d"
                                 : "#6b7280",
                       }}
@@ -544,6 +521,20 @@ const UserDashboard = () => {
             <KnowledgeBaseUser />
           </div>
         )}
+
+        {/* 3. TAMBAHAN: TAMPILAN TAB TANYA AI */}
+        {activeTab === "tanya-ai" && (
+          <div>
+            <div style={{ marginBottom: "2rem" }}>
+              <h2 style={{ margin: "0 0 8px 0" }}>Tanya AI Support</h2>
+              <p style={{ color: "var(--text-secondary)", margin: 0 }}>
+                Diskusikan pertanyaan terkait IT Anda dengan Asisten AI Helpdesk.
+              </p>
+            </div>
+            <ChatbotAI />
+          </div>
+        )}
+
       </main>
     </div>
   );

@@ -6,6 +6,9 @@ const authRoutes = require("./routes/authRoutes");
 const ticketRoutes = require("./routes/ticketRoutes");
 const knowledgeRoutes = require("./routes/knowledgeRoutes");
 const path = require("path"); // 1. PASTIKAN INI ADA DI ATAS
+const aiRoutes = require('./routes/aiRoutes');
+const userRoutes = require("./routes/userRoutes");
+
 
 const app = express();
 
@@ -32,7 +35,7 @@ app.use(
 app.use("/api/auth", authRoutes);
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/knowledge", knowledgeRoutes);
-const userRoutes = require("./routes/userRoutes");
+
 
 // Basic health check
 app.get("/", (req, res) => {
@@ -46,3 +49,5 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+// aiRoutes
+app.use('/api/ai', aiRoutes);
