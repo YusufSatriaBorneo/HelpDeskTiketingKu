@@ -26,6 +26,9 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+
+    // 👇 BARIS YANG DITAMBAHKAN UNTUK MENGHAPUS HISTORY AI 👇
+    localStorage.removeItem('ai_chat_history');
   };
 
   return (
